@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 220 20% 98%;
+  --foreground: 222 30% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 30% 12%;
+  --primary: 217 91% 45%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 14% 94%;
+  --secondary-foreground: 222 30% 15%;
+  --muted: 220 14% 94%;
+  --muted-foreground: 220 10% 45%;
+  --accent: 168 70% 38%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 14% 88%;
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: 222 32% 8%;
+  --foreground: 210 20% 96%;
+  --card: 222 28% 11%;
+  --card-foreground: 210 20% 96%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 222 30% 10%;
+  --secondary: 222 22% 16%;
+  --secondary-foreground: 210 20% 90%;
+  --muted: 222 22% 16%;
+  --muted-foreground: 220 10% 65%;
+  --accent: 168 65% 45%;
+  --accent-foreground: 222 30% 10%;
+  --destructive: 0 62% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 222 20% 20%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground) / 0.3); border-radius: 999px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
