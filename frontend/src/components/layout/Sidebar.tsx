@@ -1,22 +1,6 @@
 import { cn } from "@/lib/utils";
-import {
-  CreditCard,
-  Gauge,
-  Library,
-  Router,
-  Settings,
-  SwatchBook,
-} from "lucide-react";
 import { NavLink } from "react-router-dom";
-
-const navItems = [
-  { to: "/", label: "لوحة التحكم", icon: Gauge },
-  { to: "/generator", label: "توليد الكروت", icon: CreditCard },
-  { to: "/routers", label: "أجهزة MikroTik", icon: Router },
-  { to: "/library", label: "المكتبة", icon: Library },
-  { to: "/templates", label: "قوالب الطباعة", icon: SwatchBook },
-  { to: "/settings", label: "الإعدادات", icon: Settings },
-];
+import { navItems } from "./navItems";
 
 export function Sidebar() {
   return (

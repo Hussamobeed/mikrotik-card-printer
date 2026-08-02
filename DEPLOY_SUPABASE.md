@@ -51,7 +51,7 @@ supabase secrets set ENCRYPTION_KEY=<paste the 64-character hex string here> --p
 
 ```bash
 supabase login
-supabase link --project-ref YOUR-PROJECT-REF
+supabase link --project-ref ruknfzbifegzonxrafwx
 supabase functions deploy api
 ```
 

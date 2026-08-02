@@ -92,6 +92,21 @@ export async function synchronizeRouter(router: RouterRow) {
   });
 }
 
+async function getUserPolicy(
+  conn: Awaited<ReturnType<typeof connectRouterOS>>,
+  username: string
+): Promise<string | null> {
+  try {
+    const users = await conn.command(["/user/print", `?name=${username}`]);
+    const group = users[0]?.group;
+    if (!group) return null;
+    const groups = await conn.command(["/user/group/print", `?name=${group}`]);
+    return groups[0]?.policy ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function exportScriptToRouter(
   router: RouterRow,
   fileName: string,
@@ -112,13 +127,17 @@ export async function exportScriptToRouter(
     const sanitized = fileName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
     const scriptName = `obaidmgr_${sanitized}_${Date.now()}`;
 
+    // A script's policy list must exactly match token names supported by
+    // THAT router's RouterOS version (this varies across versions — a
+    // hardcoded list broke on some). Instead, reuse whatever policy the
+    // connecting API user's own group already has — guaranteed valid on
+    // this router since it's already assigned there.
+    const policy = await getUserPolicy(conn, router.username);
+
     log.push(`إنشاء سكريبت مؤقت "${scriptName}" على الراوتر...`);
-    await conn.command([
-      "/system/script/add",
-      `=name=${scriptName}`,
-      "=policy=ftp,reboot,read,write,policy,test,winbox,password,sniff,sensitive,api",
-      `=source=${scriptContent}`,
-    ]);
+    const addWords = ["/system/script/add", `=name=${scriptName}`, `=source=${scriptContent}`];
+    if (policy) addWords.splice(2, 0, `=policy=${policy}`);
+    await conn.command(addWords);
 
     try {
       log.push("تنفيذ السكريبت...");

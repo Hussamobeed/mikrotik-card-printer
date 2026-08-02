@@ -1,4 +1,5 @@
 import { Header } from "@/components/layout/Header";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { supabaseAuth } from "@/lib/supabaseClient";
 import { AuthPage } from "@/pages/AuthPage";
@@ -47,7 +48,7 @@ export default function App() {
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header title={title} />
-        <main className="flex-1 overflow-y-auto p-5">
+        <main className="flex-1 overflow-y-auto p-5 pb-20 md:pb-5">
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/generator" element={<GeneratorPage />} />
@@ -58,6 +59,7 @@ export default function App() {
           </Routes>
         </main>
       </div>
+      <MobileBottomNav />
     </div>
   );
 }
