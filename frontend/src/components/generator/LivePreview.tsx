@@ -13,6 +13,8 @@ interface Props {
   editable?: boolean;
   /** Called with a partial layout update when the user drags an element (only relevant if editable). */
   onLayoutChange?: (partial: Partial<PdfLayoutSettings>) => void;
+  /** Show zoom/grid toolbar. Hidden by default in template editing mode. */
+  showToolbar?: boolean;
 }
 
 const PAGE_WIDTH_MM = 210;
@@ -36,6 +38,7 @@ export function LivePreview({
   printOptions = DESIGN_MODE_OPTIONS,
   editable = false,
   onLayoutChange,
+  showToolbar = true,
 }: Props) {
   const { zoom, setZoom, gridEnabled, toggleGrid, snapToGrid, toggleSnap, gridSize } =
     useGeneratorStore();
@@ -154,43 +157,45 @@ export function LivePreview({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-secondary/40 px-3 py-2">
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" onClick={() => setZoom(zoom - 0.1)} title="تصغير">
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <span className="w-12 text-center text-xs font-medium">{Math.round(zoom * 100)}%</span>
-          <Button variant="ghost" size="icon" onClick={() => setZoom(zoom + 0.1)} title="تكبير">
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setZoom(1)}>
-            100%
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => setZoom(1)} title="ملائمة الحجم">
-            <Maximize className="h-4 w-4" />
-          </Button>
-        </div>
-        {editable && (
+      {showToolbar && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-secondary/40 px-3 py-2">
           <div className="flex items-center gap-1">
-            <Button
-              variant={gridEnabled ? "default" : "ghost"}
-              size="icon"
-              onClick={toggleGrid}
-              title="إظهار الشبكة"
-            >
-              <Grid3x3 className="h-4 w-4" />
+            <Button variant="ghost" size="icon" onClick={() => setZoom(zoom - 0.1)} title="تصغير">
+              <ZoomOut className="h-4 w-4" />
             </Button>
-            <Button
-              variant={snapToGrid ? "default" : "ghost"}
-              size="icon"
-              onClick={toggleSnap}
-              title="الالتصاق بالشبكة (Snap)"
-            >
-              <Magnet className="h-4 w-4" />
+            <span className="w-12 text-center text-xs font-medium">{Math.round(zoom * 100)}%</span>
+            <Button variant="ghost" size="icon" onClick={() => setZoom(zoom + 0.1)} title="تكبير">
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setZoom(1)}>
+              100%
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setZoom(1)} title="ملائمة الحجم">
+              <Maximize className="h-4 w-4" />
             </Button>
           </div>
-        )}
-      </div>
+          {editable && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant={gridEnabled ? "default" : "ghost"}
+                size="icon"
+                onClick={toggleGrid}
+                title="إظهار الشبكة"
+              >
+                <Grid3x3 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={snapToGrid ? "default" : "ghost"}
+                size="icon"
+                onClick={toggleSnap}
+                title="الالتصاق بالشبكة (Snap)"
+              >
+                <Magnet className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center justify-center overflow-auto rounded-lg border border-border bg-secondary/40 p-6">
         <div
