@@ -89,9 +89,7 @@ export const libraryApi = {
     form.append("file", file, String(meta.name));
     Object.entries(meta).forEach(([k, v]) => form.append(k, String(v)));
     return api
-      .post<{ data: LibraryFile }>("/library", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      })
+      .post<{ data: LibraryFile }>("/library", form)
       .then((r) => r.data.data);
   },
   /**

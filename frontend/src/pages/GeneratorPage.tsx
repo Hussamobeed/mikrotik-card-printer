@@ -82,15 +82,49 @@ export function GeneratorPage() {
     if (availableProfiles.length) setProfileMode("select");
   }, [availableProfiles.length]);
 
-  function handleGenerate() {
+  async function handleGenerate() {
     try {
       const result = generateCards(settings);
       setResult(result.numbers, result.script);
       setLastCustomer(settings.customer);
       setLastProfile(settings.profile);
       toast.success(`تم توليد ${result.numbers.length} رقم بنجاح`);
+
+      // Auto-save to library (script + PDF) — works on mobile & PC
+      await autoSaveToLibrary(result.numbers, result.script);
     } catch (err) {
       toast.error((err as Error).message);
+    }
+  }
+
+  async function autoSaveToLibrary(numbers: string[], script: string) {
+    const name = fileNameFor("auto");
+    try {
+      // 1. Save script
+      await libraryApi.upload(new Blob([script], { type: "text/plain" }), {
+        name: `${name}.rsc`,
+        fileType: "mikrotik-script",
+        customer: settings.customer,
+        profile: settings.profile,
+        prefix: settings.beginNumber,
+        numberCount: numbers.length,
+      });
+
+      // 2. Save PDF
+      const pdfBlob = await generateCardsPdf(numbers, layout, printOptions);
+      await libraryApi.upload(pdfBlob, {
+        name: `${name}.pdf`,
+        fileType: "pdf",
+        customer: settings.customer,
+        profile: settings.profile,
+        prefix: settings.beginNumber,
+        numberCount: numbers.length,
+      });
+
+      toast.success("تم الحفظ التلقائي في المكتبة (سكريبت + PDF)");
+    } catch (err) {
+      // Auto-save failure should not block the user — just warn silently
+      console.error("Auto-save failed:", err);
     }
   }
 
