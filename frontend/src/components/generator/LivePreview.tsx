@@ -223,6 +223,7 @@ export function LivePreview({
 
           <div
             onMouseDown={handlePointerDown("text")}
+            onTouchStart={handlePointerDown("text")}
             className={elementClass}
             style={{
               left: `${layout.textPositionX * scale}px`,
