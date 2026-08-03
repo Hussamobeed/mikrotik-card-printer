@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { useGeneratorStore } from "@/stores/generatorStore";
 import { PdfLayoutSettings, PrintOptions } from "@/types";
 import { Grid3x3, Magnet, Maximize, ZoomIn, ZoomOut } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface Props {
   sampleNumber: string;
@@ -66,7 +66,7 @@ export function LivePreview({
   }
 
   const handlePointerDown = useCallback(
-    (target: DragTarget) => (e: React.MouseEvent) => {
+    (target: DragTarget) => (e: React.MouseEvent | React.TouchEvent) => {
       if (!editable) return;
       e.preventDefault();
       e.stopPropagation();
@@ -75,12 +75,21 @@ export function LivePreview({
     [editable]
   );
 
+  const getEventPos = (e: React.MouseEvent | React.TouchEvent) => {
+    if ("touches" in e) {
+      const touch = e.touches[0] || e.changedTouches[0];
+      return { clientX: touch.clientX, clientY: touch.clientY };
+    }
+    return { clientX: e.clientX, clientY: e.clientY };
+  };
+
   const handlePointerMove = useCallback(
-    (e: React.MouseEvent) => {
+    (e: React.MouseEvent | React.TouchEvent) => {
       if (!editable || !dragging || !boxRef.current || !onLayoutChange) return;
+      const pos = getEventPos(e);
       const rect = boxRef.current.getBoundingClientRect();
-      const xPx = (e.clientX - rect.left) / scale;
-      const yPx = (e.clientY - rect.top) / scale;
+      const xPx = (pos.clientX - rect.left) / scale;
+      const yPx = (pos.clientY - rect.top) / scale;
       const x = snap(Math.max(0, Math.round(xPx)));
       const y = snap(Math.max(0, Math.round(yPx)));
 
@@ -97,6 +106,14 @@ export function LivePreview({
   function handlePointerUp() {
     setDragging(null);
   }
+
+  // Global touch handlers to catch drag release outside the box
+  useEffect(() => {
+    if (!dragging) return;
+    const handleGlobalTouchEnd = () => setDragging(null);
+    window.addEventListener("touchend", handleGlobalTouchEnd);
+    return () => window.removeEventListener("touchend", handleGlobalTouchEnd);
+  }, [dragging]);
 
   const gridLines = useMemo(() => {
     if (!gridEnabled) return null;
@@ -181,6 +198,8 @@ export function LivePreview({
           onMouseMove={handlePointerMove}
           onMouseUp={handlePointerUp}
           onMouseLeave={handlePointerUp}
+          onTouchMove={handlePointerMove}
+          onTouchEnd={handlePointerUp}
           className="relative select-none bg-center bg-no-repeat"
           style={{
             width: `${boxWidthPx * zoom}px`,
@@ -211,7 +230,7 @@ export function LivePreview({
               fontSize: `${layout.textSize * scale}px`,
               color: layout.textColor,
               fontWeight: layout.fontWeight,
-              fontFamily: layout.font,
+              fontFamily: layout.font === "Cairo" ? '"Cairo", sans-serif' : layout.font,
               textAlign: layout.textAlign,
               transform: layout.textRotation ? `rotate(${layout.textRotation}deg)` : undefined,
             }}
@@ -222,6 +241,7 @@ export function LivePreview({
           {printOptions.useSerialNumber && (
             <div
               onMouseDown={handlePointerDown("serial")}
+              onTouchStart={handlePointerDown("serial")}
               className={elementClass}
               style={{
                 left: `${layout.serialPositionX * scale}px`,
@@ -237,6 +257,7 @@ export function LivePreview({
           {printOptions.useDatePrinting && (
             <div
               onMouseDown={handlePointerDown("date")}
+              onTouchStart={handlePointerDown("date")}
               className={elementClass}
               style={{
                 left: `${layout.datePositionX * scale}px`,
@@ -252,6 +273,7 @@ export function LivePreview({
           {printOptions.useCustomText && (
             <div
               onMouseDown={handlePointerDown("customText")}
+              onTouchStart={handlePointerDown("customText")}
               className={elementClass}
               style={{
                 left: `${layout.customTextPositionX * scale}px`,

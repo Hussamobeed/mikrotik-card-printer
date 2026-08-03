@@ -58,7 +58,7 @@ export const defaultLayout: PdfLayoutSettings = {
   textSize: 8,
   textPositionX: 67,
   textPositionY: 26,
-  font: "helvetica",
+  font: "Cairo",
   fontWeight: "normal",
   textColor: "#000000",
   textAlign: "left",

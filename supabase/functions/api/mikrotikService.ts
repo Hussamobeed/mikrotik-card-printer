@@ -16,19 +16,20 @@ async function withConnection<T>(
   fn: (conn: Awaited<ReturnType<typeof connectRouterOS>>) => Promise<T>
 ): Promise<T> {
   const password = await decrypt(router.password_encrypted);
-  const conn = await connectRouterOS({
-    host: router.host,
-    port: router.port,
-    username: router.username,
-    password,
-    ssl: router.ssl_enabled,
-  });
+  let conn: Awaited<ReturnType<typeof connectRouterOS>> | null = null;
   try {
+    conn = await connectRouterOS({
+      host: router.host,
+      port: router.port,
+      username: router.username,
+      password,
+      ssl: router.ssl_enabled,
+    });
     return await fn(conn);
   } catch (err) {
     throw new Error(`تعذّر الاتصال بالراوتر "${router.name}": ${(err as Error).message}`);
   } finally {
-    conn.close();
+    conn?.close();
   }
 }
 
@@ -101,7 +102,20 @@ async function getUserPolicy(
     const group = users[0]?.group;
     if (!group) return null;
     const groups = await conn.command(["/user/group/print", `?name=${group}`]);
-    return groups[0]?.policy ?? null;
+    const rawPolicy = groups[0]?.policy ?? null;
+    if (!rawPolicy) return null;
+
+    // RouterOS script policies are a strict subset of user group policies.
+    // Passing invalid ones (api, rest-api, winbox, web, ftp, etc.) causes
+    // "unknown parameter" on /system/script/add.
+    const validScriptPolicies = new Set([
+      "read", "write", "test", "policy", "sensitive", "reboot",
+    ]);
+    const filtered = String(rawPolicy)
+      .split(",")
+      .map((p) => p.trim().toLowerCase())
+      .filter((p) => validScriptPolicies.has(p));
+    return filtered.length ? filtered.join(",") : null;
   } catch {
     return null;
   }
@@ -115,38 +129,28 @@ export async function exportScriptToRouter(
   return withConnection(router, async (conn) => {
     const log: string[] = [];
 
-    // NOTE ON APPROACH: writing file contents via the RouterOS API
-    // (/file/add or /file/print + /file/set "contents=") is documented by
-    // MikroTik as an unreliable timing-dependent workaround — it's exactly
-    // what produced the empty "*.rsc.txt" files reported in testing. The
-    // officially documented, reliable way to run arbitrary script text via
-    // the API is to store it as a temporary /system script object (whose
-    // "source" property accepts the full script text directly, no file
-    // involved), run it, then remove it. This is the same pattern MikroTik's
-    // own scripting docs use for API-driven automation.
     const sanitized = fileName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
     const scriptName = `obaidmgr_${sanitized}_${Date.now()}`;
 
-    // A script's policy list must exactly match token names supported by
-    // THAT router's RouterOS version (this varies across versions — a
-    // hardcoded list broke on some). Instead, reuse whatever policy the
-    // connecting API user's own group already has — guaranteed valid on
-    // this router since it's already assigned there.
+    // Only attach policy if it is 100% safe. If null/empty, skip it entirely.
     const policy = await getUserPolicy(conn, router.username);
 
     log.push(`إنشاء سكريبت مؤقت "${scriptName}" على الراوتر...`);
     const addWords = ["/system/script/add", `=name=${scriptName}`, `=source=${scriptContent}`];
-    if (policy) addWords.splice(2, 0, `=policy=${policy}`);
+    if (policy) {
+      addWords.push(`=policy=${policy}`);
+    }
     await conn.command(addWords);
 
     try {
       log.push("تنفيذ السكريبت...");
-      await conn.command(["/system/script/run", `=numbers=${scriptName}`]);
+      // RouterOS API: /system/script/run uses =.id= (not =numbers=) in most versions
+      await conn.command(["/system/script/run", `=.id=${scriptName}`]);
       log.push("تم تنفيذ السكريبت بنجاح.");
     } finally {
       log.push("حذف السكريبت المؤقت من الراوتر...");
       try {
-        await conn.command(["/system/script/remove", `=numbers=${scriptName}`]);
+        await conn.command(["/system/script/remove", `=.id=${scriptName}`]);
       } catch {
         log.push("تعذّر حذف السكريبت المؤقت تلقائيًا، يرجى حذفه يدويًا من System > Scripts إن لزم.");
       }

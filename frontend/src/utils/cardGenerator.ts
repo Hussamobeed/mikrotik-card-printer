@@ -24,7 +24,10 @@ export function generateCards(settings: GeneratorSettings): GenerationResult {
   const seen = new Set<string>();
   let script = "";
 
-  script += `/log info "بدء إنشاء المستخدمين للعميل ${customer}";\n`;
+  // Escape values for RouterOS script safety (spaces, quotes, semicolons)
+  const rosStr = (s: string) => `"${s.replace(/"/g, '\\"')}"`;
+
+  script += `/log info "بدء إنشاء المستخدمين للعميل ${rosStr(customer)}";\n`;
   script += `:local scriptRunDate [/system clock get date];\n`;
 
   // Safety cap to avoid an infinite loop if length/count combination can't produce
@@ -46,9 +49,9 @@ export function generateCards(settings: GeneratorSettings): GenerationResult {
     const password = passwordType === "same" ? candidate : '""';
 
     script +=
-      `/log info "إنشاء مستخدم جديد: ${candidate}";\n` +
-      `/tool user-manager user add customer=${customer} username=${candidate} password=${password} first-name=$scriptRunDate comment=${comment};\n` +
-      `/tool user-manager user create-and-activate-profile customer=${customer} profile=${profile} "${candidate}";\n`;
+      `/log info "إنشاء مستخدم جديد: ${rosStr(candidate)}";\n` +
+      `/tool user-manager user add customer=${rosStr(customer)} username=${rosStr(candidate)} password=${rosStr(password)} first-name=$scriptRunDate comment=${rosStr(comment)};\n` +
+      `/tool user-manager user create-and-activate-profile customer=${rosStr(customer)} profile=${rosStr(profile)} ${rosStr(candidate)};\n`;
   }
 
   if (numbers.length < count) {
@@ -57,7 +60,7 @@ export function generateCards(settings: GeneratorSettings): GenerationResult {
     );
   }
 
-  script += `/log info "اكتمال إنشاء المستخدمين للعميل ${customer} - العدد الإجمالي: ${count}";\n`;
+  script += `/log info "اكتمال إنشاء المستخدمين للعميل ${rosStr(customer)} - العدد الإجمالي: ${count}";\n`;
 
   return { numbers, script };
 }

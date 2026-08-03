@@ -40,6 +40,7 @@ export function GeneratorPage() {
   } = useGeneratorStore();
   const { selectedRouterId, setLastCustomer, setLastProfile } = useAppStore();
   const [isExporting, setIsExporting] = useState(false);
+  const [exportLog, setExportLog] = useState<string[]>([]);
 
   const { data: routers = [] } = useQuery({ queryKey: ["routers"], queryFn: routersApi.list });
 
@@ -173,6 +174,7 @@ export function GeneratorPage() {
     if (!script) return toast.error("قم بتوليد السكريبت أولًا");
     if (!selectedRouterId) return toast.error("اختر راوترًا من صفحة الأجهزة أولًا");
     setIsExporting(true);
+    setExportLog([]);
     const toastId = toast.loading("جارٍ رفع السكريبت وتنفيذه على الراوتر...");
     try {
       const name = `${fileNameFor("mikrotik")}.rsc`;
@@ -182,9 +184,10 @@ export function GeneratorPage() {
         scriptContent: script,
       });
       toast.success("تم التصدير والتنفيذ على MikroTik بنجاح", { id: toastId });
-      console.info(result.log.join("\n"));
+      setExportLog(result.log);
     } catch (err) {
       toast.error((err as Error).message, { id: toastId });
+      setExportLog([(err as Error).message]);
     } finally {
       setIsExporting(false);
     }
@@ -486,6 +489,14 @@ export function GeneratorPage() {
               <p className="text-center text-xs text-muted-foreground">
                 أضف راوترًا من صفحة "أجهزة MikroTik" لتفعيل التصدير المباشر
               </p>
+            )}
+            {exportLog.length > 0 && (
+              <pre
+                className="max-h-40 overflow-auto rounded-lg border border-border bg-secondary/40 p-3 text-xs"
+                dir="ltr"
+              >
+                {exportLog.join("\n")}
+              </pre>
             )}
           </CardContent>
         </Card>

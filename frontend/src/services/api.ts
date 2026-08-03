@@ -32,8 +32,14 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (res) => res,
   (error) => {
+    const status = error?.response?.status;
     const message = error?.response?.data?.error?.message ?? error.message ?? "حدث خطأ غير متوقع";
-    return Promise.reject(new Error(message));
+    const code = error?.response?.data?.error?.code ?? "ERROR";
+    const enhancedError = new Error(message) as any;
+    enhancedError.status = status;
+    enhancedError.code = code;
+    enhancedError.original = error;
+    return Promise.reject(enhancedError);
   }
 );
 

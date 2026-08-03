@@ -165,6 +165,7 @@ export function TemplatesPage() {
                     <div>
                       <Label>الخط</Label>
                       <Select value={layout.font} onChange={(e) => patchLayout({ font: e.target.value })}>
+                        <option value="Cairo">Cairo (عربي)</option>
                         <option value="helvetica">Helvetica</option>
                         <option value="times">Times</option>
                         <option value="courier">Courier</option>

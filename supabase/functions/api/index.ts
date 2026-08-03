@@ -8,6 +8,7 @@ import {
   testConnection,
   type RouterRow,
 } from "./mikrotikService.ts";
+import { API_VERSION } from "./version.ts";
 
 type Vars = { userId: string };
 const app = new Hono<{ Variables: Vars }>().basePath("/api");
@@ -20,8 +21,11 @@ const corsHeaders = {
 
 app.use("*", async (c, next) => {
   if (c.req.method === "OPTIONS") return c.text("ok", 200, corsHeaders);
-  await next();
-  Object.entries(corsHeaders).forEach(([k, v]) => c.res.headers.set(k, v));
+  try {
+    await next();
+  } finally {
+    Object.entries(corsHeaders).forEach(([k, v]) => c.res.headers.set(k, v));
+  }
 });
 
 function fail(c: any, status: number, message: string, code = "ERROR") {
@@ -31,7 +35,12 @@ function fail(c: any, status: number, message: string, code = "ERROR") {
 // ---------------------------------------------------------------- health --
 // (No auth required — simple liveness check.)
 app.get("/health", (c) =>
-  c.json({ status: "ok", service: "obaid-manager-api", timestamp: new Date().toISOString() })
+  c.json({
+    status: "ok",
+    service: "obaid-manager-api",
+    version: API_VERSION,
+    timestamp: new Date().toISOString(),
+  })
 );
 
 // ---------------------------------------------------------- auth gate ----
@@ -94,7 +103,11 @@ app.post("/routers", async (c) => {
   const input = parsed.data;
 
   if (input.isDefault) {
-    await supabase.from("routers").update({ is_default: false }).eq("user_id", userId);
+    const { error: resetErr } = await supabase
+      .from("routers")
+      .update({ is_default: false })
+      .eq("user_id", userId);
+    if (resetErr) return fail(c, 500, resetErr.message, "DB_ERROR");
   }
 
   const { data, error } = await supabase
@@ -125,7 +138,11 @@ app.put("/routers/:id", async (c) => {
   const input = parsed.data;
 
   if (input.isDefault) {
-    await supabase.from("routers").update({ is_default: false }).eq("user_id", userId);
+    const { error: resetErr } = await supabase
+      .from("routers")
+      .update({ is_default: false })
+      .eq("user_id", userId);
+    if (resetErr) return fail(c, 500, resetErr.message, "DB_ERROR");
   }
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -500,9 +517,26 @@ app.post("/settings/import/json", async (c) => {
     .parse(await c.req.json());
 
   for (const [key, value] of Object.entries(body.settings)) {
-    await supabase.from("app_settings").upsert({ user_id: userId, key, value, updated_at: new Date().toISOString() });
+    const { error } = await supabase
+      .from("app_settings")
+      .upsert({ user_id: userId, key, value, updated_at: new Date().toISOString() });
+    if (error) return fail(c, 500, error.message, "DB_ERROR");
   }
-  return c.json({ data: { imported: true } });
+
+  for (const preset of body.presets) {
+    const { error } = await supabase
+      .from("presets")
+      .insert({ user_id: userId, name: preset.name, settings: preset.settings_json });
+    if (error) return fail(c, 500, error.message, "DB_ERROR");
+  }
+
+  return c.json({
+    data: {
+      imported: true,
+      settingsCount: Object.keys(body.settings).length,
+      presetsCount: body.presets.length,
+    },
+  });
 });
 
 app.get("/settings/presets/all", async (c) => {
