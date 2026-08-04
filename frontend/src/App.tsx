@@ -6,6 +6,7 @@ import { AuthPage } from "@/pages/AuthPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { GeneratorPage } from "@/pages/GeneratorPage";
 import { LibraryPage } from "@/pages/LibraryPage";
+import { ReportsPage } from "@/pages/ReportsPage";
 import { RoutersPage } from "@/pages/RoutersPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { TemplatesPage } from "@/pages/TemplatesPage";
@@ -16,6 +17,7 @@ import { Route, Routes, useLocation } from "react-router-dom";
 const titles: Record<string, string> = {
   "/": "لوحة التحكم",
   "/generator": "توليد الكروت",
+  "/reports": "تقارير User Manager",
   "/routers": "أجهزة MikroTik",
   "/library": "المكتبة",
   "/templates": "قوالب الطباعة",
@@ -54,6 +56,7 @@ export default function App() {
             <Route path="/generator" element={<GeneratorPage />} />
             <Route path="/routers" element={<RoutersPage />} />
             <Route path="/library" element={<LibraryPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
             <Route path="/templates" element={<TemplatesPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>

@@ -626,3 +626,118 @@ app.delete("/templates/:id", async (c) => {
 });
 
 Deno.serve(app.fetch);
+// -------------------------------------------------------------- reports --
+app.get("/reports/:routerId", async (c) => {
+  const userId = c.get("userId");
+  const routerId = c.req.param("routerId");
+  const { fromDate, toDate, profile, price, port, nasId } = c.req.query();
+
+  // 1. Get router
+  const { data: routerRow, error: routerErr } = await supabase
+    .from("routers")
+    .select("*")
+    .eq("id", routerId)
+    .eq("user_id", userId)
+    .single();
+  if (routerErr || !routerRow) return fail(c, 404, "الراوتر غير موجود", "NOT_FOUND");
+
+  // 2. Connect and fetch data
+  try {
+    const password = await decrypt(routerRow.password_encrypted);
+    const conn = await connectRouterOS({
+      host: routerRow.host,
+      port: routerRow.port,
+      username: routerRow.username,
+      password,
+      ssl: routerRow.ssl_enabled,
+    });
+
+    try {
+      // Fetch users
+      const usersRows = await conn.command(["/tool/user-manager/user/print"]);
+      // Fetch profiles for pricing
+      const profilesRows = await conn.command(["/tool/user-manager/profile/print"]);
+
+      // Build price map
+      const priceMap: Record<string, number> = {};
+      for (const p of profilesRows) {
+        const priceVal = parseFloat(p.price ?? "0");
+        priceMap[p.name ?? ""] = isNaN(priceVal) ? 0 : priceVal;
+      }
+
+      // Enrich and filter users
+      let items = usersRows.map((u) => ({
+        username: u.username ?? "",
+        customer: u.customer ?? "",
+        profile: u.profile ?? "",
+        firstName: u["first-name"] ?? "",
+        comment: u.comment ?? "",
+        disabled: u.disabled === "true",
+        nasPort: u["nas-port"] ?? "",
+        nasPortId: u["nas-port-id"] ?? "",
+        callingStationId: u["calling-station-id"] ?? "",
+        calledStationId: u["called-station-id"] ?? "",
+        lastSeen: u["last-seen"] ?? "",
+        bytesIn: u["bytes-in"] ?? "0",
+        bytesOut: u["bytes-out"] ?? "0",
+        uptime: u.uptime ?? "",
+        price: priceMap[u.profile ?? ""] ?? 0,
+      }));
+
+      // Apply filters
+      if (profile) {
+        items = items.filter((i) => i.profile.toLowerCase().includes(profile.toLowerCase()));
+      }
+      if (price) {
+        const priceNum = parseFloat(price);
+        if (!isNaN(priceNum)) {
+          items = items.filter((i) => i.price === priceNum);
+        }
+      }
+      if (port) {
+        items = items.filter((i) => i.nasPort.includes(port));
+      }
+      if (nasId) {
+        items = items.filter((i) => 
+          i.nasPortId.toLowerCase().includes(nasId.toLowerCase()) ||
+          i.calledStationId.toLowerCase().includes(nasId.toLowerCase())
+        );
+      }
+      if (fromDate || toDate) {
+        items = items.filter((i) => {
+          const d = i.firstName.toLowerCase();
+          if (fromDate && !d.includes(fromDate.toLowerCase())) return false;
+          if (toDate && !d.includes(toDate.toLowerCase())) return false;
+          return true;
+        });
+      }
+
+      // Summary
+      const totalRevenue = items.reduce((sum, i) => sum + i.price, 0);
+      const profileBreakdown: Record<string, { count: number; revenue: number }> = {};
+      for (const i of items) {
+        if (!profileBreakdown[i.profile]) {
+          profileBreakdown[i.profile] = { count: 0, revenue: 0 };
+        }
+        profileBreakdown[i.profile].count++;
+        profileBreakdown[i.profile].revenue += i.price;
+      }
+
+      return c.json({
+        data: {
+          routerName: routerRow.name,
+          totalCount: items.length,
+          totalRevenue,
+          profileBreakdown,
+          items,
+        },
+      });
+    } finally {
+      conn.close();
+    }
+  } catch (err) {
+    return fail(c, 502, (err as Error).message, "ROUTER_ERROR");
+  }
+});
+
+

@@ -1,3 +1,4 @@
+export { connectRouterOS } from "./mikrotikClient.ts";
 import { connectRouterOS } from "./mikrotikClient.ts";
 import { decrypt } from "./cryptoService.ts";
 

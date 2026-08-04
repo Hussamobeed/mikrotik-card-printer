@@ -3,9 +3,11 @@ import { supabaseAuth } from "@/lib/supabaseClient";
 import {
   CachedSyncData,
   LibraryFile,
+  ReportFilters,
   RouterInput,
   RouterPublic,
   SyncResult,
+  UserManagerReport,
 } from "@/types";
 
 // VITE_SUPABASE_FUNCTION_URL looks like:
@@ -82,6 +84,17 @@ export const exportApi = {
 };
 
 // ---- Library ----
+// ---- Reports ----
+export const reportsApi = {
+  fetch: (routerId: string, filters: ReportFilters = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => { if (v) params.append(k, v); });
+    return api
+      .get<{ data: UserManagerReport }>(`/reports/${routerId}?${params.toString()}`)
+      .then((r) => r.data.data);
+  },
+};
+
 export const libraryApi = {
   list: () => api.get<{ data: LibraryFile[] }>("/library").then((r) => r.data.data),
   upload: (file: Blob, meta: Record<string, string | number>) => {
