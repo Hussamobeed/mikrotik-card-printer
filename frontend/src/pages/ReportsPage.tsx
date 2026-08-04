@@ -7,6 +7,7 @@ import { reportsApi, routersApi } from "@/services/api";
 import { UserManagerReport } from "@/types";
 import { useQuery } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   BarChart3,
   Download,
   Filter,
@@ -41,7 +42,7 @@ export function ReportsPage() {
     queryFn: routersApi.list,
   });
 
-  // Step 1: Sync from MikroTik to DB (SLOW - 5-10 min for large routers)
+  // Step 1: Sync from MikroTik to DB (SLOW - may timeout for 2000+ users on free tier)
   async function syncFromRouter() {
     if (!routerId) return;
     setLoading(true);
@@ -54,8 +55,14 @@ export function ReportsPage() {
       // After sync, fetch from DB (instant)
       await fetchFromCache();
     } catch (err: any) {
-      setProgress({ step: "فشل", retry: 0, message: err.message || "فشل المزامنة" });
-      alert(err.message || "فشل المزامنة — قد يكون الراوتر بطيئًا أو غير متصل");
+      const isTimeout = err.message?.includes("timeout") || err.status === 504 || err.status === 502;
+      if (isTimeout) {
+        setProgress({ step: "فشل", retry: 0, message: "انتهت المهلة — الراوتر يحتوي على مستخدمين كثيرين" });
+        alert("انتهت مهلة الاتصال (30 ثانية).\n\nالراوتر يحتوي على عدد كبير من المستخدمين ويتجاوز حد الخطة المجانية.\n\nالحلول:\n1. استخدم راوتر أصغر للتجربة\n2. قم بترقية خطة Supabase\n3. أو استخدم "قراءة من القاعدة" إذا سبق وأن نجحت المزامنة");
+      } else {
+        setProgress({ step: "فشل", retry: 0, message: err.message || "فشل المزامنة" });
+        alert(err.message || "فشل المزامنة — تأكد من تشغيل الراوتر");
+      }
     } finally {
       setLoading(false);
     }
@@ -188,6 +195,17 @@ export function ReportsPage() {
             <p className="text-xs text-emerald-600">
               ✓ تم جلب {report.items.length} مستخدم من "{report.routerName}"
             </p>
+          )}
+          {!report && !loading && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">ملاحظة مهمة:</p>
+                  <p>المزامنة من الراوتر قد تستغرق وقتًا حسب عدد المستخدمين. إذا كان لديك أكثر من 2000 مستخدم، قد تنتهي المهلة (timeout) بسبب قيود الخطة المجانية. في هذه الحالة، جرّب مزامنة راوتر أصغر أو قم بالترقية.</p>
+                </div>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

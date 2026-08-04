@@ -10,10 +10,12 @@ export function DashboardPage() {
   const { data: routers = [] } = useQuery({ queryKey: ["routers"], queryFn: routersApi.list });
 
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_SUPABASE_FUNCTION_URL}/health`)
-      .then((r) => r.json())
-      .then((d) => setApiVersion(d.version))
-      .catch(() => setApiVersion("غير متوفر"));
+    // Use api instance which has correct baseURL and headers
+    import("@/services/api").then(({ api }) => {
+      api.get("/health")
+        .then((r: any) => setApiVersion(r.data.version))
+        .catch(() => setApiVersion("غير متوفر"));
+    });
   }, []);
 
   const counts = {
