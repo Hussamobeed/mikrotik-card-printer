@@ -110,10 +110,13 @@ export const libraryApi = {
 // ---- Templates (per-profile print layouts) ----
 // ---- Reports (User Manager sessions, on-demand only) ----
 export const reportsApi = {
+  // Session history can be large on routers running a long time, so this
+  // gets a much longer timeout than the default 30s used elsewhere.
   fetch: (routerId: string) =>
     api
       .get<{ data: { rows: Record<string, string>[]; fetchedAt: string } }>(
-        `/reports/${routerId}`
+        `/reports/${routerId}`,
+        { timeout: 120_000 }
       )
       .then((r) => r.data.data),
 };
