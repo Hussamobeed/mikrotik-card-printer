@@ -11,7 +11,7 @@ import { defaultLayout } from "@/stores/generatorStore";
 import { useAppStore } from "@/stores/appStore";
 import { PdfLayoutSettings, PrintTemplate } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Move, Plus, Trash2 } from "lucide-react";
 import { ChangeEvent, useState } from "react";
 import toast from "react-hot-toast";
 
@@ -22,6 +22,7 @@ export function TemplatesPage() {
   const [name, setName] = useState("");
   const [profile, setProfile] = useState("");
   const [layout, setLocalLayout] = useState<PdfLayoutSettings>(defaultLayout);
+  const [activePosElement, setActivePosElement] = useState<"text" | "serial" | "date" | "customText">("text");
 
   const { data: templates = [] } = useQuery<PrintTemplate[]>({
     queryKey: ["templates"],
@@ -165,8 +166,8 @@ export function TemplatesPage() {
                     <div>
                       <Label>الخط</Label>
                       <Select value={layout.font} onChange={(e) => patchLayout({ font: e.target.value })}>
+                        <option value="Cairo">Cairo (عربي)</option>
                         <option value="helvetica">Helvetica</option>
-                        <option value="cairo">Cairo (عربي)</option>
                         <option value="times">Times</option>
                         <option value="courier">Courier</option>
                       </Select>
@@ -433,6 +434,204 @@ export function TemplatesPage() {
       </div>
 
       <div className="space-y-5">
+        {/* Position Controls - Easy X/Y input for mobile & PC */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Move className="h-4 w-4" />
+              تحريك العناصر (X / Y)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Element selector */}
+            <div>
+              <Label className="text-xs">العنصر</Label>
+              <Select
+                value={activePosElement}
+                onChange={(e) => setActivePosElement(e.target.value as any)}
+              >
+                <option value="text">رقم الكرت (Username)</option>
+                <option value="serial">الرقم التسلسلي</option>
+                <option value="date">التاريخ</option>
+                <option value="customText">نص اختياري</option>
+              </Select>
+            </div>
+
+            {/* Size & Color - moved UP */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs">الحجم</Label>
+                <Input
+                  type="number"
+                  value={
+                    activePosElement === "text"
+                      ? layout.textSize
+                      : activePosElement === "serial"
+                        ? layout.serialNumberSize
+                        : activePosElement === "date"
+                          ? layout.dateSize
+                          : layout.customTextSize
+                  }
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (activePosElement === "text") patchLayout({ textSize: v });
+                    else if (activePosElement === "serial") patchLayout({ serialNumberSize: v });
+                    else if (activePosElement === "date") patchLayout({ dateSize: v });
+                    else patchLayout({ customTextSize: v });
+                  }}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">اللون</Label>
+                <input
+                  type="color"
+                  className="h-10 w-full rounded-lg border border-border"
+                  value={
+                    activePosElement === "text"
+                      ? layout.textColor
+                      : activePosElement === "serial"
+                        ? layout.serialColor
+                        : activePosElement === "date"
+                          ? layout.dateColor
+                          : layout.customTextColor
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (activePosElement === "text") patchLayout({ textColor: v });
+                    else if (activePosElement === "serial") patchLayout({ serialColor: v });
+                    else if (activePosElement === "date") patchLayout({ dateColor: v });
+                    else patchLayout({ customTextColor: v });
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* X / Y inputs with arrow nudge buttons - moved DOWN */}
+            <div className="grid grid-cols-[1fr_auto_1fr_auto] gap-2 items-end">
+              <div>
+                <Label className="text-xs">X (أفقي)</Label>
+                <Input
+                  type="number"
+                  value={
+                    activePosElement === "text"
+                      ? layout.textPositionX
+                      : activePosElement === "serial"
+                        ? layout.serialPositionX
+                        : activePosElement === "date"
+                          ? layout.datePositionX
+                          : layout.customTextPositionX
+                  }
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (activePosElement === "text") patchLayout({ textPositionX: v });
+                    else if (activePosElement === "serial") patchLayout({ serialPositionX: v });
+                    else if (activePosElement === "date") patchLayout({ datePositionX: v });
+                    else patchLayout({ customTextPositionX: v });
+                  }}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => {
+                    const key =
+                      activePosElement === "text"
+                        ? "textPositionY"
+                        : activePosElement === "serial"
+                          ? "serialPositionY"
+                          : activePosElement === "date"
+                            ? "datePositionY"
+                            : "customTextPositionY";
+                    patchLayout({ [key]: (layout as any)[key] - 1 });
+                  }}
+                >
+                  <ArrowUp className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => {
+                    const key =
+                      activePosElement === "text"
+                        ? "textPositionY"
+                        : activePosElement === "serial"
+                          ? "serialPositionY"
+                          : activePosElement === "date"
+                            ? "datePositionY"
+                            : "customTextPositionY";
+                    patchLayout({ [key]: (layout as any)[key] + 1 });
+                  }}
+                >
+                  <ArrowDown className="h-3 w-3" />
+                </Button>
+              </div>
+              <div>
+                <Label className="text-xs">Y (رأسي)</Label>
+                <Input
+                  type="number"
+                  value={
+                    activePosElement === "text"
+                      ? layout.textPositionY
+                      : activePosElement === "serial"
+                        ? layout.serialPositionY
+                        : activePosElement === "date"
+                          ? layout.datePositionY
+                          : layout.customTextPositionY
+                  }
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (activePosElement === "text") patchLayout({ textPositionY: v });
+                    else if (activePosElement === "serial") patchLayout({ serialPositionY: v });
+                    else if (activePosElement === "date") patchLayout({ datePositionY: v });
+                    else patchLayout({ customTextPositionY: v });
+                  }}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => {
+                    const key =
+                      activePosElement === "text"
+                        ? "textPositionX"
+                        : activePosElement === "serial"
+                          ? "serialPositionX"
+                          : activePosElement === "date"
+                            ? "datePositionX"
+                            : "customTextPositionX";
+                    patchLayout({ [key]: (layout as any)[key] - 1 });
+                  }}
+                >
+                  <ArrowLeft className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => {
+                    const key =
+                      activePosElement === "text"
+                        ? "textPositionX"
+                        : activePosElement === "serial"
+                          ? "serialPositionX"
+                          : activePosElement === "date"
+                            ? "datePositionX"
+                            : "customTextPositionX";
+                    patchLayout({ [key]: (layout as any)[key] + 1 });
+                  }}
+                >
+                  <ArrowRight className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>معاينة (كل العناصر ظاهرة هنا لتسهيل التموضع)</CardTitle>
@@ -443,6 +642,7 @@ export function TemplatesPage() {
               layout={layout}
               editable
               onLayoutChange={patchLayout}
+              showToolbar={false}
             />
           </CardContent>
         </Card>

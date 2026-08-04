@@ -24,7 +24,12 @@ export function generateCards(settings: GeneratorSettings): GenerationResult {
   const seen = new Set<string>();
   let script = "";
 
-  script += `/log info "بدء إنشاء المستخدمين للعميل ${customer}";\n`;
+  // rosEsc  = escape quotes for use INSIDE already-quoted strings (log messages)
+  // rosQuote = wrap value in quotes for use as command arguments
+  const rosEsc = (s: string) => s.replace(/"/g, '\\"');
+  const rosQuote = (s: string) => `"${s.replace(/"/g, '\\"')}"`;
+
+  script += `/log info "بدء إنشاء المستخدمين للعميل ${rosEsc(customer)}";\n`;
   script += `:local scriptRunDate [/system clock get date];\n`;
 
   // Safety cap to avoid an infinite loop if length/count combination can't produce
@@ -43,12 +48,13 @@ export function generateCards(settings: GeneratorSettings): GenerationResult {
     seen.add(candidate);
     numbers.push(candidate);
 
-    const password = passwordType === "same" ? candidate : '""';
+    // password: "same" → quoted candidate, "empty" → RouterOS empty string syntax ""
+    const password = passwordType === "same" ? rosQuote(candidate) : '""';
 
     script +=
-      `/log info "إنشاء مستخدم جديد: ${candidate}";\n` +
-      `/tool user-manager user add customer=${customer} username=${candidate} password=${password} first-name=$scriptRunDate comment=${comment};\n` +
-      `/tool user-manager user create-and-activate-profile customer=${customer} profile=${profile} "${candidate}";\n`;
+      `/log info "إنشاء مستخدم جديد: ${rosEsc(candidate)}";\n` +
+      `/tool user-manager user add customer=${rosQuote(customer)} username=${rosQuote(candidate)} password=${password} first-name=$scriptRunDate comment=${rosQuote(comment)};\n` +
+      `/tool user-manager user create-and-activate-profile customer=${rosQuote(customer)} profile=${rosQuote(profile)} ${rosQuote(candidate)};\n`;
   }
 
   if (numbers.length < count) {
@@ -57,7 +63,7 @@ export function generateCards(settings: GeneratorSettings): GenerationResult {
     );
   }
 
-  script += `/log info "اكتمال إنشاء المستخدمين للعميل ${customer} - العدد الإجمالي: ${count}";\n`;
+  script += `/log info "اكتمال إنشاء المستخدمين للعميل ${rosEsc(customer)} - العدد الإجمالي: ${count}";\n`;
 
   return { numbers, script };
 }

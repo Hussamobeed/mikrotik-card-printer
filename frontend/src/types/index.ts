@@ -136,3 +136,32 @@ export interface LibraryFile {
   number_count: number | null;
   created_at: string;
 }
+
+
+// ---- Reports ----
+export interface UserManagerReportItem {
+  username: string;
+  customer: string;
+  profile: string;
+  firstName: string;
+  comment: string;
+  disabled: boolean;
+  nasPort: string;
+  nasPortId: string;
+  callingStationId: string;
+  calledStationId: string;
+  lastSeen: string;
+  bytesIn: string;
+  bytesOut: string;
+  uptime: string;
+  price: number;
+}
+
+export interface UserManagerReport {
+  routerName: string;
+  totalCount: number;
+  totalRevenue: number;
+  profileBreakdown: Record<string, { count: number; revenue: number }>;
+  items: UserManagerReportItem[];
+}
+

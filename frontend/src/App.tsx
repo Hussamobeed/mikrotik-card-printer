@@ -17,10 +17,10 @@ import { Route, Routes, useLocation } from "react-router-dom";
 const titles: Record<string, string> = {
   "/": "لوحة التحكم",
   "/generator": "توليد الكروت",
+  "/reports": "تقارير User Manager",
   "/routers": "أجهزة MikroTik",
   "/library": "المكتبة",
   "/templates": "قوالب الطباعة",
-  "/reports": "التقارير",
   "/settings": "الإعدادات",
 };
 
@@ -56,8 +56,8 @@ export default function App() {
             <Route path="/generator" element={<GeneratorPage />} />
             <Route path="/routers" element={<RoutersPage />} />
             <Route path="/library" element={<LibraryPage />} />
-            <Route path="/templates" element={<TemplatesPage />} />
             <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/templates" element={<TemplatesPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>

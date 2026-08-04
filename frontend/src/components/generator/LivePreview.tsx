@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { useGeneratorStore } from "@/stores/generatorStore";
 import { PdfLayoutSettings, PrintOptions } from "@/types";
 import { Grid3x3, Magnet, Maximize, ZoomIn, ZoomOut } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface Props {
   sampleNumber: string;
@@ -13,6 +13,8 @@ interface Props {
   editable?: boolean;
   /** Called with a partial layout update when the user drags an element (only relevant if editable). */
   onLayoutChange?: (partial: Partial<PdfLayoutSettings>) => void;
+  /** Show zoom/grid toolbar. Hidden by default in template editing mode. */
+  showToolbar?: boolean;
 }
 
 const PAGE_WIDTH_MM = 210;
@@ -28,14 +30,6 @@ const DESIGN_MODE_OPTIONS: PrintOptions = {
   customText: "نص اختياري",
 };
 
-/** Maps the stored font key to an actual usable CSS font-family for the preview. */
-function cssFontFamily(font: string): string {
-  if (font === "cairo") return "'Cairo', sans-serif";
-  if (font === "times") return "'Times New Roman', serif";
-  if (font === "courier") return "'Courier New', monospace";
-  return "Helvetica, Arial, sans-serif";
-}
-
 type DragTarget = "text" | "serial" | "date" | "customText" | null;
 
 export function LivePreview({
@@ -44,6 +38,7 @@ export function LivePreview({
   printOptions = DESIGN_MODE_OPTIONS,
   editable = false,
   onLayoutChange,
+  showToolbar = true,
 }: Props) {
   const { zoom, setZoom, gridEnabled, toggleGrid, snapToGrid, toggleSnap, gridSize } =
     useGeneratorStore();
@@ -73,16 +68,6 @@ export function LivePreview({
     return Math.round(value / gridSize) * gridSize;
   }
 
-  /** Extracts clientX/clientY from either a mouse or touch React event. */
-  function getPointerXY(e: React.MouseEvent | React.TouchEvent): { x: number; y: number } | null {
-    if ("touches" in e) {
-      const touch = e.touches[0] ?? e.changedTouches[0];
-      if (!touch) return null;
-      return { x: touch.clientX, y: touch.clientY };
-    }
-    return { x: e.clientX, y: e.clientY };
-  }
-
   const handlePointerDown = useCallback(
     (target: DragTarget) => (e: React.MouseEvent | React.TouchEvent) => {
       if (!editable) return;
@@ -93,16 +78,21 @@ export function LivePreview({
     [editable]
   );
 
+  const getEventPos = (e: React.MouseEvent | React.TouchEvent) => {
+    if ("touches" in e) {
+      const touch = e.touches[0] || e.changedTouches[0];
+      return { clientX: touch.clientX, clientY: touch.clientY };
+    }
+    return { clientX: e.clientX, clientY: e.clientY };
+  };
+
   const handlePointerMove = useCallback(
     (e: React.MouseEvent | React.TouchEvent) => {
       if (!editable || !dragging || !boxRef.current || !onLayoutChange) return;
-      const point = getPointerXY(e);
-      if (!point) return;
-      // Prevent the page from scrolling while dragging an element on touch.
-      if ("touches" in e) e.preventDefault();
+      const pos = getEventPos(e);
       const rect = boxRef.current.getBoundingClientRect();
-      const xPx = (point.x - rect.left) / scale;
-      const yPx = (point.y - rect.top) / scale;
+      const xPx = (pos.clientX - rect.left) / scale;
+      const yPx = (pos.clientY - rect.top) / scale;
       const x = snap(Math.max(0, Math.round(xPx)));
       const y = snap(Math.max(0, Math.round(yPx)));
 
@@ -119,6 +109,14 @@ export function LivePreview({
   function handlePointerUp() {
     setDragging(null);
   }
+
+  // Global touch handlers to catch drag release outside the box
+  useEffect(() => {
+    if (!dragging) return;
+    const handleGlobalTouchEnd = () => setDragging(null);
+    window.addEventListener("touchend", handleGlobalTouchEnd);
+    return () => window.removeEventListener("touchend", handleGlobalTouchEnd);
+  }, [dragging]);
 
   const gridLines = useMemo(() => {
     if (!gridEnabled) return null;
@@ -154,48 +152,50 @@ export function LivePreview({
   }, [gridEnabled, gridSize, scale, boxWidthPx, boxHeightPx]);
 
   const elementClass = editable
-    ? "absolute cursor-move touch-none whitespace-nowrap rounded px-0.5 hover:outline hover:outline-1 hover:outline-primary"
+    ? "absolute cursor-move whitespace-nowrap rounded px-0.5 hover:outline hover:outline-1 hover:outline-primary"
     : "absolute whitespace-nowrap rounded px-0.5";
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-secondary/40 px-3 py-2">
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" onClick={() => setZoom(zoom - 0.1)} title="تصغير">
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <span className="w-12 text-center text-xs font-medium">{Math.round(zoom * 100)}%</span>
-          <Button variant="ghost" size="icon" onClick={() => setZoom(zoom + 0.1)} title="تكبير">
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setZoom(1)}>
-            100%
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => setZoom(1)} title="ملائمة الحجم">
-            <Maximize className="h-4 w-4" />
-          </Button>
-        </div>
-        {editable && (
+      {showToolbar && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-secondary/40 px-3 py-2">
           <div className="flex items-center gap-1">
-            <Button
-              variant={gridEnabled ? "default" : "ghost"}
-              size="icon"
-              onClick={toggleGrid}
-              title="إظهار الشبكة"
-            >
-              <Grid3x3 className="h-4 w-4" />
+            <Button variant="ghost" size="icon" onClick={() => setZoom(zoom - 0.1)} title="تصغير">
+              <ZoomOut className="h-4 w-4" />
             </Button>
-            <Button
-              variant={snapToGrid ? "default" : "ghost"}
-              size="icon"
-              onClick={toggleSnap}
-              title="الالتصاق بالشبكة (Snap)"
-            >
-              <Magnet className="h-4 w-4" />
+            <span className="w-12 text-center text-xs font-medium">{Math.round(zoom * 100)}%</span>
+            <Button variant="ghost" size="icon" onClick={() => setZoom(zoom + 0.1)} title="تكبير">
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setZoom(1)}>
+              100%
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setZoom(1)} title="ملائمة الحجم">
+              <Maximize className="h-4 w-4" />
             </Button>
           </div>
-        )}
-      </div>
+          {editable && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant={gridEnabled ? "default" : "ghost"}
+                size="icon"
+                onClick={toggleGrid}
+                title="إظهار الشبكة"
+              >
+                <Grid3x3 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={snapToGrid ? "default" : "ghost"}
+                size="icon"
+                onClick={toggleSnap}
+                title="الالتصاق بالشبكة (Snap)"
+              >
+                <Magnet className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center justify-center overflow-auto rounded-lg border border-border bg-secondary/40 p-6">
         <div
@@ -205,7 +205,6 @@ export function LivePreview({
           onMouseLeave={handlePointerUp}
           onTouchMove={handlePointerMove}
           onTouchEnd={handlePointerUp}
-          onTouchCancel={handlePointerUp}
           className="relative select-none bg-center bg-no-repeat"
           style={{
             width: `${boxWidthPx * zoom}px`,
@@ -237,7 +236,7 @@ export function LivePreview({
               fontSize: `${layout.textSize * scale}px`,
               color: layout.textColor,
               fontWeight: layout.fontWeight,
-              fontFamily: cssFontFamily(layout.font),
+              fontFamily: layout.font === "Cairo" ? '"Cairo", sans-serif' : layout.font,
               textAlign: layout.textAlign,
               transform: layout.textRotation ? `rotate(${layout.textRotation}deg)` : undefined,
             }}
@@ -248,7 +247,7 @@ export function LivePreview({
           {printOptions.useSerialNumber && (
             <div
               onMouseDown={handlePointerDown("serial")}
-            onTouchStart={handlePointerDown("serial")}
+              onTouchStart={handlePointerDown("serial")}
               className={elementClass}
               style={{
                 left: `${layout.serialPositionX * scale}px`,
@@ -264,7 +263,7 @@ export function LivePreview({
           {printOptions.useDatePrinting && (
             <div
               onMouseDown={handlePointerDown("date")}
-            onTouchStart={handlePointerDown("date")}
+              onTouchStart={handlePointerDown("date")}
               className={elementClass}
               style={{
                 left: `${layout.datePositionX * scale}px`,
@@ -280,7 +279,7 @@ export function LivePreview({
           {printOptions.useCustomText && (
             <div
               onMouseDown={handlePointerDown("customText")}
-            onTouchStart={handlePointerDown("customText")}
+              onTouchStart={handlePointerDown("customText")}
               className={elementClass}
               style={{
                 left: `${layout.customTextPositionX * scale}px`,
