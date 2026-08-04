@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { libraryApi, routersApi } from "@/services/api";
+import { api, libraryApi, routersApi } from "@/services/api";
 import { useQuery } from "@tanstack/react-query";
 import { CreditCard, FileSpreadsheet, FileText, Router as RouterIcon, Server } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -10,12 +10,9 @@ export function DashboardPage() {
   const { data: routers = [] } = useQuery({ queryKey: ["routers"], queryFn: routersApi.list });
 
   useEffect(() => {
-    // Use api instance which has correct baseURL and headers
-    import("@/services/api").then(({ api }) => {
-      api.get("/health")
-        .then((r: any) => setApiVersion(r.data.version))
-        .catch(() => setApiVersion("غير متوفر"));
-    });
+    api.get("/health")
+      .then((r) => setApiVersion(r.data.version))
+      .catch(() => setApiVersion("غير متوفر"));
   }, []);
 
   const counts = {

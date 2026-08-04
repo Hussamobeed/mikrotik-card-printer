@@ -3,7 +3,6 @@ import { supabaseAuth } from "@/lib/supabaseClient";
 import {
   CachedSyncData,
   LibraryFile,
-  ReportFilters,
   RouterInput,
   RouterPublic,
   SyncResult,

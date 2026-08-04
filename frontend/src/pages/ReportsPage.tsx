@@ -16,7 +16,6 @@ import {
   Search,
   TrendingUp,
   Users,
-  WifiOff,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
