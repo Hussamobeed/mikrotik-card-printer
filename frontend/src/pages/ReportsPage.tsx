@@ -23,7 +23,6 @@ export function ReportsPage() {
   const [report, setReport] = useState<UserManagerReport | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Filters — applied CLIENT-SIDE after fetching all data
   const [filters, setFilters] = useState({
     profile: "",
     price: "",
@@ -42,76 +41,50 @@ export function ReportsPage() {
   async function fetchReport() {
     if (!routerId) return;
     setLoading(true);
+    setReport(null);
     try {
       const data = await reportsApi.fetch(routerId);
       setReport(data);
     } catch (err: any) {
-      alert(err.message || "فشل جلب التقرير");
+      alert(err.message || "فشل جلب التقرير — قد يكون الراوتر بطيئًا، جرّب مرة أخرى");
     } finally {
       setLoading(false);
     }
   }
 
-  // Client-side filtering + sorting
   const [sortKey, setSortKey] = useState<keyof UserManagerReport["items"][0] | "price">("username");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const filteredItems = useMemo(() => {
     if (!report) return [];
     let items = [...report.items];
-
-    // Apply each filter
-    if (filters.profile) {
-      items = items.filter((i) => i.profile === filters.profile);
-    }
+    if (filters.profile) items = items.filter((i) => i.profile === filters.profile);
     if (filters.price) {
       const p = parseFloat(filters.price);
       if (!isNaN(p)) items = items.filter((i) => i.price === p);
     }
-    if (filters.fromDate) {
-      items = items.filter((i) => i.firstName.includes(filters.fromDate));
-    }
-    if (filters.toDate) {
-      items = items.filter((i) => i.firstName.includes(filters.toDate));
-    }
-    if (filters.port) {
-      items = items.filter((i) => i.nasPort.includes(filters.port));
-    }
+    if (filters.fromDate) items = items.filter((i) => i.firstName.includes(filters.fromDate));
+    if (filters.toDate) items = items.filter((i) => i.firstName.includes(filters.toDate));
+    if (filters.port) items = items.filter((i) => i.nasPort.includes(filters.port));
     if (filters.nasId) {
       const q = filters.nasId.toLowerCase();
-      items = items.filter(
-        (i) =>
-          i.nasPortId.toLowerCase().includes(q) ||
-          i.calledStationId.toLowerCase().includes(q)
-      );
+      items = items.filter((i) => i.nasPortId.toLowerCase().includes(q) || i.calledStationId.toLowerCase().includes(q));
     }
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
-      items = items.filter(
-        (i) =>
-          i.username.toLowerCase().includes(q) ||
-          i.profile.toLowerCase().includes(q) ||
-          i.customer.toLowerCase().includes(q) ||
-          i.comment.toLowerCase().includes(q)
-      );
+      items = items.filter((i) => i.username.toLowerCase().includes(q) || i.profile.toLowerCase().includes(q) || i.customer.toLowerCase().includes(q) || i.comment.toLowerCase().includes(q));
     }
-
-    // Sort
     items.sort((a, b) => {
       const av = a[sortKey] ?? "";
       const bv = b[sortKey] ?? "";
-      if (typeof av === "number" && typeof bv === "number") {
-        return sortDir === "asc" ? av - bv : bv - av;
-      }
+      if (typeof av === "number" && typeof bv === "number") return sortDir === "asc" ? av - bv : bv - av;
       const as = String(av).toLowerCase();
       const bs = String(bv).toLowerCase();
       return sortDir === "asc" ? as.localeCompare(bs) : bs.localeCompare(as);
     });
-
     return items;
   }, [report, filters, searchTerm, sortKey, sortDir]);
 
-  // Summary based on FILTERED items
   const summary = useMemo(() => {
     if (!report) return null;
     const totalRevenue = filteredItems.reduce((s, i) => s + i.price, 0);
@@ -132,29 +105,21 @@ export function ReportsPage() {
 
   function exportCSV() {
     if (!report) return;
-    const headers = [
-      "Username", "Customer", "Profile", "Price", "First-Name", "Comment",
-      "NAS-Port", "NAS-Port-ID", "Called-Station", "Last-Seen", "Bytes-In", "Bytes-Out", "Uptime"
-    ];
-    const rows = filteredItems.map((i) => [
-      i.username, i.customer, i.profile, i.price,
-      i.firstName, i.comment, i.nasPort, i.nasPortId,
-      i.calledStationId, i.lastSeen, i.bytesIn, i.bytesOut, i.uptime
-    ]);
+    const headers = ["Username","Customer","Profile","Price","First-Name","Comment","NAS-Port","NAS-Port-ID","Called-Station","Last-Seen","Bytes-In","Bytes-Out","Uptime"];
+    const rows = filteredItems.map((i) => [i.username,i.customer,i.profile,i.price,i.firstName,i.comment,i.nasPort,i.nasPortId,i.calledStationId,i.lastSeen,i.bytesIn,i.bytesOut,i.uptime]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '\"')}"`).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `report_${report.routerName}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `report_${report.routerName}_${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
   const profileOptions = useMemo(() => {
     if (!report) return [];
-    const set = new Set(report.items.map((i) => i.profile).filter(Boolean));
-    return Array.from(set).sort();
+    return Array.from(new Set(report.items.map((i) => i.profile).filter(Boolean))).sort();
   }, [report]);
 
   return (
@@ -166,165 +131,165 @@ export function ReportsPage() {
         </h1>
       </div>
 
-      {/* Step 1: Select Router */}
+      {/* STEP 1: Router selector — ALWAYS visible */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <RefreshCw className="h-4 w-4" />
-            الخطوة 1: اختر الراوتر واجلب البيانات
+            اختر الراوتر
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex gap-2 flex-wrap">
-            <Select value={routerId} onChange={(e) => { setRouterId(e.target.value); setReport(null); }} className="w-64">
-              <option value="">-- اختر راوتر --</option>
-              {routers.map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </Select>
+          <div className="flex gap-2 flex-wrap items-end">
+            <div className="w-full sm:w-64">
+              <Label className="text-xs">الراوتر</Label>
+              <Select value={routerId} onChange={(e) => { setRouterId(e.target.value); setReport(null); }}>
+                <option value="">-- اختر راوتر --</option>
+                {routers.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </Select>
+            </div>
             <Button onClick={fetchReport} disabled={!routerId || loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-              جلب البيانات
+              {loading ? "جاري الجلب..." : "جلب البيانات"}
             </Button>
           </div>
           {report && (
-            <p className="text-xs text-muted-foreground">
-              تم جلب {report.items.length} مستخدم من راوتر "{report.routerName}" — استخدم الفلاتر أدناه للتصفية
+            <p className="text-xs text-emerald-600">
+              ✓ تم جلب {report.items.length} مستخدم من "{report.routerName}"
             </p>
           )}
         </CardContent>
       </Card>
 
-      {/* Step 2: Filters (only show after data loaded) */}
+      {/* STEP 2: Everything else HIDDEN until report loaded */}
       {report && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Filter className="h-4 w-4" />
-              الخطوة 2: فلترة البيانات (بدون إعادة الاتصال بالراوتر)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              <div>
-                <Label className="text-xs">البروفايل</Label>
-                <Select value={filters.profile} onChange={(e) => setFilters((f) => ({ ...f, profile: e.target.value }))}>
-                  <option value="">الكل</option>
-                  {profileOptions.map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">السعر</Label>
-                <Input type="number" placeholder="مثال: 180" value={filters.price} onChange={(e) => setFilters((f) => ({ ...f, price: e.target.value }))} />
-              </div>
-              <div>
-                <Label className="text-xs">من تاريخ (First-Name)</Label>
-                <Input placeholder="2026-05-01" value={filters.fromDate} onChange={(e) => setFilters((f) => ({ ...f, fromDate: e.target.value }))} />
-              </div>
-              <div>
-                <Label className="text-xs">إلى تاريخ (First-Name)</Label>
-                <Input placeholder="2026-05-31" value={filters.toDate} onChange={(e) => setFilters((f) => ({ ...f, toDate: e.target.value }))} />
-              </div>
-              <div>
-                <Label className="text-xs">NAS Port</Label>
-                <Input placeholder="2151700060" value={filters.port} onChange={(e) => setFilters((f) => ({ ...f, port: e.target.value }))} />
-              </div>
-              <div>
-                <Label className="text-xs">NAS ID / Called Station</Label>
-                <Input placeholder="00:00:00:00:00:00" value={filters.nasId} onChange={(e) => setFilters((f) => ({ ...f, nasId: e.target.value }))} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Summary Cards */}
-      {summary && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card><CardContent className="flex flex-col gap-2 p-5"><Users className="h-5 w-5 text-primary" /><p className="text-2xl font-bold">{summary.totalCount}</p><p className="text-xs text-muted-foreground">إجمالي المستخدمين في الراوتر</p></CardContent></Card>
-          <Card><CardContent className="flex flex-col gap-2 p-5"><Filter className="h-5 w-5 text-orange-500" /><p className="text-2xl font-bold">{summary.filteredCount}</p><p className="text-xs text-muted-foreground">نتائج الفلتر الحالي</p></CardContent></Card>
-          <Card><CardContent className="flex flex-col gap-2 p-5"><TrendingUp className="h-5 w-5 text-emerald-500" /><p className="text-2xl font-bold">{summary.totalRevenue.toLocaleString()}</p><p className="text-xs text-muted-foreground">إيرادات الفلتر الحالي</p></CardContent></Card>
-          <Card><CardContent className="flex flex-col gap-2 p-5"><BarChart3 className="h-5 w-5 text-blue-500" /><p className="text-2xl font-bold">{summary.profileCount}</p><p className="text-xs text-muted-foreground">بروفايلات في النتيجة</p></CardContent></Card>
-        </div>
-      )}
-
-      {/* Profile Breakdown */}
-      {summary && Object.keys(summary.profileBreakdown).length > 0 && (
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">الإحصائيات حسب البروفايل</CardTitle></CardHeader>
-          <CardContent>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(summary.profileBreakdown).map(([profile, stats]) => (
-                <div key={profile} className="rounded-lg border border-border bg-secondary/30 p-3">
-                  <p className="font-semibold text-sm">{profile}</p>
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1"><span>{stats.count} مستخدم</span><span className="text-emerald-600 font-medium">{stats.revenue.toLocaleString()}</span></div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Data Table */}
-      {report && (
-        <Card>
-          <CardHeader className="pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <CardTitle className="text-sm flex items-center gap-2"><Search className="h-4 w-4" />بيانات المستخدمين</CardTitle>
-            <div className="flex gap-2">
-              <Input placeholder="بحث سريع..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-40 sm:w-56" />
-              <Button variant="outline" size="sm" onClick={exportCSV}><Download className="h-4 w-4 mr-1" />تصدير CSV</Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-secondary/40 text-right">
-                    {[
-                      { key: "username", label: "المستخدم" },
-                      { key: "profile", label: "البروفايل" },
-                      { key: "price", label: "السعر" },
-                      { key: "firstName", label: "تاريخ الإنشاء" },
-                      { key: "comment", label: "ملاحظة" },
-                      { key: "nasPort", label: "Port" },
-                      { key: "nasPortId", label: "NAS ID" },
-                      { key: "calledStationId", label: "Called Station" },
-                      { key: "lastSeen", label: "آخر ظهور" },
-                      { key: "bytesIn", label: "Bytes In" },
-                      { key: "bytesOut", label: "Bytes Out" },
-                      { key: "uptime", label: "Uptime" },
-                    ].map((col) => (
-                      <th key={col.key} className="px-3 py-2 cursor-pointer hover:bg-secondary transition-colors whitespace-nowrap" onClick={() => { if (sortKey === col.key) { setSortDir((d) => (d === "asc" ? "desc" : "asc")); } else { setSortKey(col.key as any); setSortDir("asc"); } }}>
-                        <div className="flex items-center gap-1 justify-end">{col.label}{sortKey === col.key && <span className="text-primary">{sortDir === "asc" ? "▲" : "▼"}</span>}</div>
-                      </th>
+        <>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Filter className="h-4 w-4" />
+                فلترة البيانات
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div>
+                  <Label className="text-xs">البروفايل</Label>
+                  <Select value={filters.profile} onChange={(e) => setFilters((f) => ({ ...f, profile: e.target.value }))}>
+                    <option value="">الكل</option>
+                    {profileOptions.map((p) => (
+                      <option key={p} value={p}>{p}</option>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map((item, idx) => (
-                    <tr key={idx} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
-                      <td className="px-3 py-2 font-medium">{item.username}</td>
-                      <td className="px-3 py-2">{item.profile}</td>
-                      <td className="px-3 py-2 text-emerald-600 font-medium">{item.price}</td>
-                      <td className="px-3 py-2 text-xs">{item.firstName}</td>
-                      <td className="px-3 py-2 text-xs">{item.comment}</td>
-                      <td className="px-3 py-2 text-xs font-mono">{item.nasPort}</td>
-                      <td className="px-3 py-2 text-xs font-mono">{item.nasPortId}</td>
-                      <td className="px-3 py-2 text-xs font-mono">{item.calledStationId}</td>
-                      <td className="px-3 py-2 text-xs">{item.lastSeen}</td>
-                      <td className="px-3 py-2 text-xs font-mono">{item.bytesIn}</td>
-                      <td className="px-3 py-2 text-xs font-mono">{item.bytesOut}</td>
-                      <td className="px-3 py-2 text-xs">{item.uptime}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">السعر</Label>
+                  <Input type="number" placeholder="مثال: 180" value={filters.price} onChange={(e) => setFilters((f) => ({ ...f, price: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">من تاريخ</Label>
+                  <Input placeholder="2026-05-01" value={filters.fromDate} onChange={(e) => setFilters((f) => ({ ...f, fromDate: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">إلى تاريخ</Label>
+                  <Input placeholder="2026-05-31" value={filters.toDate} onChange={(e) => setFilters((f) => ({ ...f, toDate: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">NAS Port</Label>
+                  <Input placeholder="2151700060" value={filters.port} onChange={(e) => setFilters((f) => ({ ...f, port: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">NAS ID / Called Station</Label>
+                  <Input placeholder="00:00:00:00:00:00" value={filters.nasId} onChange={(e) => setFilters((f) => ({ ...f, nasId: e.target.value }))} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {summary && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Card><CardContent className="flex flex-col gap-2 p-5"><Users className="h-5 w-5 text-primary" /><p className="text-2xl font-bold">{summary.totalCount}</p><p className="text-xs text-muted-foreground">إجمالي المستخدمين</p></CardContent></Card>
+              <Card><CardContent className="flex flex-col gap-2 p-5"><Filter className="h-5 w-5 text-orange-500" /><p className="text-2xl font-bold">{summary.filteredCount}</p><p className="text-xs text-muted-foreground">نتائج الفلتر</p></CardContent></Card>
+              <Card><CardContent className="flex flex-col gap-2 p-5"><TrendingUp className="h-5 w-5 text-emerald-500" /><p className="text-2xl font-bold">{summary.totalRevenue.toLocaleString()}</p><p className="text-xs text-muted-foreground">إيرادات الفلتر</p></CardContent></Card>
+              <Card><CardContent className="flex flex-col gap-2 p-5"><BarChart3 className="h-5 w-5 text-blue-500" /><p className="text-2xl font-bold">{summary.profileCount}</p><p className="text-xs text-muted-foreground">بروفايلات</p></CardContent></Card>
             </div>
-            {filteredItems.length === 0 && <p className="text-center text-muted-foreground py-8">لا توجد نتائج مطابقة للفلتر الحالي</p>}
-          </CardContent>
-        </Card>
+          )}
+
+          {summary && Object.keys(summary.profileBreakdown).length > 0 && (
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">الإحصائيات حسب البروفايل</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {Object.entries(summary.profileBreakdown).map(([profile, stats]) => (
+                    <div key={profile} className="rounded-lg border border-border bg-secondary/30 p-3">
+                      <p className="font-semibold text-sm">{profile}</p>
+                      <div className="flex justify-between text-xs text-muted-foreground mt-1"><span>{stats.count} مستخدم</span><span className="text-emerald-600 font-medium">{stats.revenue.toLocaleString()}</span></div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader className="pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <CardTitle className="text-sm flex items-center gap-2"><Search className="h-4 w-4" />بيانات المستخدمين</CardTitle>
+              <div className="flex gap-2">
+                <Input placeholder="بحث..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-40 sm:w-56" />
+                <Button variant="outline" size="sm" onClick={exportCSV}><Download className="h-4 w-4 mr-1" />تصدير CSV</Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/40 text-right">
+                      {[
+                        { key: "username", label: "المستخدم" },
+                        { key: "profile", label: "البروفايل" },
+                        { key: "price", label: "السعر" },
+                        { key: "firstName", label: "تاريخ الإنشاء" },
+                        { key: "comment", label: "ملاحظة" },
+                        { key: "nasPort", label: "Port" },
+                        { key: "nasPortId", label: "NAS ID" },
+                        { key: "calledStationId", label: "Called Station" },
+                        { key: "lastSeen", label: "آخر ظهور" },
+                        { key: "bytesIn", label: "Bytes In" },
+                        { key: "bytesOut", label: "Bytes Out" },
+                        { key: "uptime", label: "Uptime" },
+                      ].map((col) => (
+                        <th key={col.key} className="px-3 py-2 cursor-pointer hover:bg-secondary transition-colors whitespace-nowrap" onClick={() => { if (sortKey === col.key) { setSortDir((d) => (d === "asc" ? "desc" : "asc")); } else { setSortKey(col.key as any); setSortDir("asc"); } }}>
+                          <div className="flex items-center gap-1 justify-end">{col.label}{sortKey === col.key && <span className="text-primary">{sortDir === "asc" ? "▲" : "▼"}</span>}</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredItems.map((item, idx) => (
+                      <tr key={idx} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
+                        <td className="px-3 py-2 font-medium">{item.username}</td>
+                        <td className="px-3 py-2">{item.profile}</td>
+                        <td className="px-3 py-2 text-emerald-600 font-medium">{item.price}</td>
+                        <td className="px-3 py-2 text-xs">{item.firstName}</td>
+                        <td className="px-3 py-2 text-xs">{item.comment}</td>
+                        <td className="px-3 py-2 text-xs font-mono">{item.nasPort}</td>
+                        <td className="px-3 py-2 text-xs font-mono">{item.nasPortId}</td>
+                        <td className="px-3 py-2 text-xs font-mono">{item.calledStationId}</td>
+                        <td className="px-3 py-2 text-xs">{item.lastSeen}</td>
+                        <td className="px-3 py-2 text-xs font-mono">{item.bytesIn}</td>
+                        <td className="px-3 py-2 text-xs font-mono">{item.bytesOut}</td>
+                        <td className="px-3 py-2 text-xs">{item.uptime}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {filteredItems.length === 0 && <p className="text-center text-muted-foreground py-8">لا توجد نتائج مطابقة</p>}
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   );

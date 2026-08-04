@@ -1,11 +1,20 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { libraryApi, routersApi } from "@/services/api";
 import { useQuery } from "@tanstack/react-query";
-import { CreditCard, FileSpreadsheet, FileText, Router as RouterIcon } from "lucide-react";
+import { CreditCard, FileSpreadsheet, FileText, Router as RouterIcon, Server } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export function DashboardPage() {
+  const [apiVersion, setApiVersion] = useState<string | null>(null);
   const { data: files = [] } = useQuery({ queryKey: ["library"], queryFn: libraryApi.list });
   const { data: routers = [] } = useQuery({ queryKey: ["routers"], queryFn: routersApi.list });
+
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_SUPABASE_FUNCTION_URL}/health`)
+      .then((r) => r.json())
+      .then((d) => setApiVersion(d.version))
+      .catch(() => setApiVersion("غير متوفر"));
+  }, []);
 
   const counts = {
     pdf: files.filter((f) => f.file_type === "pdf").length,
@@ -40,8 +49,20 @@ export function DashboardPage() {
         ))}
       </div>
 
-      <Card>
-        <CardContent className="flex items-center gap-4 p-6">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card>
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Server className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="font-semibold">إصدار الخادم (API)</p>
+              <p className="text-sm text-muted-foreground font-mono">{apiVersion ?? "جاري التحقق..."}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-4 p-6">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
             <CreditCard className="h-6 w-6" />
           </div>
@@ -53,6 +74,7 @@ export function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

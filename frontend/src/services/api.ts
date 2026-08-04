@@ -88,7 +88,7 @@ export const exportApi = {
 export const reportsApi = {
   fetch: (routerId: string) =>
     api
-      .get<{ data: UserManagerReport }>(`/reports/${routerId}`)
+      .get<{ data: UserManagerReport }>(`/reports/${routerId}`, { timeout: 120_000 })
       .then((r) => r.data.data),
 };
 
