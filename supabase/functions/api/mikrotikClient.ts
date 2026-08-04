@@ -182,12 +182,7 @@ export async function connectRouterOS(params: {
     }
   }
 
-  try {
-    await login();
-  } catch (err) {
-    conn.close();
-    throw err;
-  }
+  await login();
 
   return {
     write,

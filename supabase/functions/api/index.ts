@@ -3,13 +3,12 @@ import { z } from "npm:zod@3.23.8";
 import { LIBRARY_BUCKET, supabase } from "./db.ts";
 import { encrypt } from "./cryptoService.ts";
 import {
-  connectRouterOS,
   exportScriptToRouter,
+  fetchUserManagerReport,
   synchronizeRouter,
   testConnection,
   type RouterRow,
 } from "./mikrotikService.ts";
-import { decrypt } from "./cryptoService.ts";
 import { API_VERSION } from "./version.ts";
 
 type Vars = { userId: string };
@@ -23,11 +22,8 @@ const corsHeaders = {
 
 app.use("*", async (c, next) => {
   if (c.req.method === "OPTIONS") return c.text("ok", 200, corsHeaders);
-  try {
-    await next();
-  } finally {
-    Object.entries(corsHeaders).forEach(([k, v]) => c.res.headers.set(k, v));
-  }
+  await next();
+  Object.entries(corsHeaders).forEach(([k, v]) => c.res.headers.set(k, v));
 });
 
 function fail(c: any, status: number, message: string, code = "ERROR") {
@@ -105,11 +101,7 @@ app.post("/routers", async (c) => {
   const input = parsed.data;
 
   if (input.isDefault) {
-    const { error: resetErr } = await supabase
-      .from("routers")
-      .update({ is_default: false })
-      .eq("user_id", userId);
-    if (resetErr) return fail(c, 500, resetErr.message, "DB_ERROR");
+    await supabase.from("routers").update({ is_default: false }).eq("user_id", userId);
   }
 
   const { data, error } = await supabase
@@ -140,11 +132,7 @@ app.put("/routers/:id", async (c) => {
   const input = parsed.data;
 
   if (input.isDefault) {
-    const { error: resetErr } = await supabase
-      .from("routers")
-      .update({ is_default: false })
-      .eq("user_id", userId);
-    if (resetErr) return fail(c, 500, resetErr.message, "DB_ERROR");
+    await supabase.from("routers").update({ is_default: false }).eq("user_id", userId);
   }
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -355,6 +343,20 @@ app.get("/export-to-mikrotik/history", async (c) => {
   return c.json({ data: data ?? [] });
 });
 
+// ------------------------------------------------------------- reports --
+// User Manager session report — fetched from the router live, on demand
+// only (button press), never cached or auto-refreshed.
+app.get("/reports/:routerId", async (c) => {
+  const router = await getRouterRow(c.req.param("routerId"), c.get("userId"));
+  if (!router) return fail(c, 404, "الراوتر غير موجود", "ROUTER_NOT_FOUND");
+  try {
+    const result = await fetchUserManagerReport(router);
+    return c.json({ data: result });
+  } catch (err) {
+    return fail(c, 502, (err as Error).message, "REPORT_FETCH_FAILED");
+  }
+});
+
 // ------------------------------------------------------------- library --
 app.get("/library", async (c) => {
   const { data, error } = await supabase
@@ -519,26 +521,9 @@ app.post("/settings/import/json", async (c) => {
     .parse(await c.req.json());
 
   for (const [key, value] of Object.entries(body.settings)) {
-    const { error } = await supabase
-      .from("app_settings")
-      .upsert({ user_id: userId, key, value, updated_at: new Date().toISOString() });
-    if (error) return fail(c, 500, error.message, "DB_ERROR");
+    await supabase.from("app_settings").upsert({ user_id: userId, key, value, updated_at: new Date().toISOString() });
   }
-
-  for (const preset of body.presets) {
-    const { error } = await supabase
-      .from("presets")
-      .insert({ user_id: userId, name: preset.name, settings: preset.settings_json });
-    if (error) return fail(c, 500, error.message, "DB_ERROR");
-  }
-
-  return c.json({
-    data: {
-      imported: true,
-      settingsCount: Object.keys(body.settings).length,
-      presetsCount: body.presets.length,
-    },
-  });
+  return c.json({ data: { imported: true } });
 });
 
 app.get("/settings/presets/all", async (c) => {
@@ -628,118 +613,3 @@ app.delete("/templates/:id", async (c) => {
 });
 
 Deno.serve(app.fetch);
-// -------------------------------------------------------------- reports --
-app.get("/reports/:routerId", async (c) => {
-  const userId = c.get("userId");
-  const routerId = c.req.param("routerId");
-  const { fromDate, toDate, profile, price, port, nasId } = c.req.query();
-
-  // 1. Get router
-  const { data: routerRow, error: routerErr } = await supabase
-    .from("routers")
-    .select("*")
-    .eq("id", routerId)
-    .eq("user_id", userId)
-    .single();
-  if (routerErr || !routerRow) return fail(c, 404, "الراوتر غير موجود", "NOT_FOUND");
-
-  // 2. Connect and fetch data
-  try {
-    const password = await decrypt(routerRow.password_encrypted);
-    const conn = await connectRouterOS({
-      host: routerRow.host,
-      port: routerRow.port,
-      username: routerRow.username,
-      password,
-      ssl: routerRow.ssl_enabled,
-    });
-
-    try {
-      // Fetch users
-      const usersRows = await conn.command(["/tool/user-manager/user/print"]);
-      // Fetch profiles for pricing
-      const profilesRows = await conn.command(["/tool/user-manager/profile/print"]);
-
-      // Build price map
-      const priceMap: Record<string, number> = {};
-      for (const p of profilesRows) {
-        const priceVal = parseFloat(p.price ?? "0");
-        priceMap[p.name ?? ""] = isNaN(priceVal) ? 0 : priceVal;
-      }
-
-      // Enrich and filter users
-      let items = usersRows.map((u) => ({
-        username: u.username ?? "",
-        customer: u.customer ?? "",
-        profile: u.profile ?? "",
-        firstName: u["first-name"] ?? "",
-        comment: u.comment ?? "",
-        disabled: u.disabled === "true",
-        nasPort: u["nas-port"] ?? "",
-        nasPortId: u["nas-port-id"] ?? "",
-        callingStationId: u["calling-station-id"] ?? "",
-        calledStationId: u["called-station-id"] ?? "",
-        lastSeen: u["last-seen"] ?? "",
-        bytesIn: u["bytes-in"] ?? "0",
-        bytesOut: u["bytes-out"] ?? "0",
-        uptime: u.uptime ?? "",
-        price: priceMap[u.profile ?? ""] ?? 0,
-      }));
-
-      // Apply filters
-      if (profile) {
-        items = items.filter((i) => i.profile.toLowerCase().includes(profile.toLowerCase()));
-      }
-      if (price) {
-        const priceNum = parseFloat(price);
-        if (!isNaN(priceNum)) {
-          items = items.filter((i) => i.price === priceNum);
-        }
-      }
-      if (port) {
-        items = items.filter((i) => i.nasPort.includes(port));
-      }
-      if (nasId) {
-        items = items.filter((i) => 
-          i.nasPortId.toLowerCase().includes(nasId.toLowerCase()) ||
-          i.calledStationId.toLowerCase().includes(nasId.toLowerCase())
-        );
-      }
-      if (fromDate || toDate) {
-        items = items.filter((i) => {
-          const d = i.firstName.toLowerCase();
-          if (fromDate && !d.includes(fromDate.toLowerCase())) return false;
-          if (toDate && !d.includes(toDate.toLowerCase())) return false;
-          return true;
-        });
-      }
-
-      // Summary
-      const totalRevenue = items.reduce((sum, i) => sum + i.price, 0);
-      const profileBreakdown: Record<string, { count: number; revenue: number }> = {};
-      for (const i of items) {
-        if (!profileBreakdown[i.profile]) {
-          profileBreakdown[i.profile] = { count: 0, revenue: 0 };
-        }
-        profileBreakdown[i.profile].count++;
-        profileBreakdown[i.profile].revenue += i.price;
-      }
-
-      return c.json({
-        data: {
-          routerName: routerRow.name,
-          totalCount: items.length,
-          totalRevenue,
-          profileBreakdown,
-          items,
-        },
-      });
-    } finally {
-      conn.close();
-    }
-  } catch (err) {
-    return fail(c, 502, (err as Error).message, "ROUTER_ERROR");
-  }
-});
-
-

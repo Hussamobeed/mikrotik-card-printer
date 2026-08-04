@@ -2,23 +2,41 @@ import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { GeneratorSettings, PdfLayoutSettings, PrintOptions } from "@/types";
 
-const jsPdfFontMap: Record<string, string> = {
-  Cairo: "helvetica",
-  helvetica: "helvetica",
-  times: "times",
-  courier: "courier",
-};
-
-function resolvePdfFont(font: string): string {
-  return jsPdfFontMap[font] || "helvetica";
-}
-
-function detectImageFormat(dataUrl: string): string {
+/** jsPDF needs to know the real image format — treating a PNG/WEBP upload as
+ * "JPEG" can corrupt or blank out the rendered background. */
+function detectImageFormat(dataUrl: string): "PNG" | "WEBP" | "JPEG" {
   const match = dataUrl.match(/^data:image\/(\w+);/);
   const fmt = match?.[1]?.toUpperCase();
   if (fmt === "PNG") return "PNG";
   if (fmt === "WEBP") return "WEBP";
   return "JPEG";
+}
+
+let cachedCairoBase64: string | null = null;
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+/** Fetches and registers the real Cairo TTF with jsPDF so it actually
+ * appears in the exported PDF (not just the on-screen CSS preview). The
+ * font bytes are cached after the first fetch, but registration itself
+ * must be repeated on every new jsPDF() instance — jsPDF doesn't share
+ * registered fonts across instances. */
+async function ensureCairoFontRegistered(doc: jsPDF): Promise<void> {
+  if (!cachedCairoBase64) {
+    const res = await fetch("/fonts/Cairo-Variable.ttf");
+    const buffer = await res.arrayBuffer();
+    cachedCairoBase64 = arrayBufferToBase64(buffer);
+  }
+  doc.addFileToVFS("Cairo-Variable.ttf", cachedCairoBase64);
+  doc.addFont("Cairo-Variable.ttf", "Cairo", "normal");
 }
 
 export function downloadTextFile(content: string, filename: string) {
@@ -83,6 +101,11 @@ export async function generateCardsPdf(
 ): Promise<Blob> {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
 
+  const pdfFontName = layout.font === "cairo" ? "Cairo" : layout.font || "helvetica";
+  if (layout.font === "cairo") {
+    await ensureCairoFontRegistered(doc);
+  }
+
   const availableWidth = PAGE_WIDTH_MM - 2 * MARGIN_MM;
   const availableHeight = PAGE_HEIGHT_MM - 2 * MARGIN_MM;
   const boxWidth = (availableWidth - layout.boxSpacing * (layout.columns - 1)) / layout.columns;
@@ -113,8 +136,9 @@ export async function generateCardsPdf(
     const y = MARGIN_MM + row * (boxHeight + layout.boxSpacing);
 
     if (layout.backgroundImageDataUrl && imgDims) {
+      const imgFormat = detectImageFormat(layout.backgroundImageDataUrl);
       if (layout.backgroundFit === "stretch") {
-        doc.addImage(layout.backgroundImageDataUrl, detectImageFormat(layout.backgroundImageDataUrl), x, y, boxWidth, boxHeight);
+        doc.addImage(layout.backgroundImageDataUrl, imgFormat, x, y, boxWidth, boxHeight);
       } else {
         const imgRatio = imgDims.width / imgDims.height;
         const boxRatio = boxWidth / boxHeight;
@@ -137,10 +161,10 @@ export async function generateCardsPdf(
           doc.rect(x, y, boxWidth, boxHeight, null);
           doc.clip();
           doc.discardPath();
-          doc.addImage(layout.backgroundImageDataUrl, detectImageFormat(layout.backgroundImageDataUrl), offsetX, offsetY, drawWidth, drawHeight);
+          doc.addImage(layout.backgroundImageDataUrl, imgFormat, offsetX, offsetY, drawWidth, drawHeight);
           doc.restoreGraphicsState();
         } else {
-          doc.addImage(layout.backgroundImageDataUrl, detectImageFormat(layout.backgroundImageDataUrl), offsetX, offsetY, drawWidth, drawHeight);
+          doc.addImage(layout.backgroundImageDataUrl, imgFormat, offsetX, offsetY, drawWidth, drawHeight);
         }
       }
     }
@@ -155,7 +179,7 @@ export async function generateCardsPdf(
     // matching how the CSS preview positions it (top-anchored). Without this,
     // jsPDF anchors to the text baseline, which sits lower than the box's
     // "top" — that's why the printed PDF looked higher/misaligned vs preview.
-    doc.setFont(resolvePdfFont(layout.font || "helvetica"), layout.fontWeight === "bold" ? "bold" : "normal");
+    doc.setFont(pdfFontName, pdfFontName === "Cairo" ? "normal" : layout.fontWeight === "bold" ? "bold" : "normal");
     doc.setTextColor(layout.textColor || "#000000");
     doc.setFontSize(layout.textSize);
     doc.text(numbers[i], x + layout.textPositionX * mmPerPx, y + layout.textPositionY * mmPerPx, {
@@ -165,7 +189,7 @@ export async function generateCardsPdf(
     });
 
     if (printOptions.useSerialNumber) {
-      doc.setFont(resolvePdfFont(layout.font || "helvetica"), "normal");
+      doc.setFont(pdfFontName, "normal");
       doc.setTextColor(layout.serialColor || "#000000");
       doc.setFontSize(layout.serialNumberSize);
       doc.text(
@@ -178,7 +202,7 @@ export async function generateCardsPdf(
     }
 
     if (printOptions.useDatePrinting) {
-      doc.setFont(resolvePdfFont(layout.font || "helvetica"), "normal");
+      doc.setFont(pdfFontName, "normal");
       doc.setTextColor(layout.dateColor || "#000000");
       doc.setFontSize(layout.dateSize);
       doc.text(today, x + layout.datePositionX * mmPerPx, y + layout.datePositionY * mmPerPx, {
@@ -187,7 +211,7 @@ export async function generateCardsPdf(
     }
 
     if (printOptions.useCustomText && printOptions.customText) {
-      doc.setFont(resolvePdfFont(layout.font || "helvetica"), "normal");
+      doc.setFont(pdfFontName, "normal");
       doc.setTextColor(layout.customTextColor || "#000000");
       doc.setFontSize(layout.customTextSize);
       doc.text(

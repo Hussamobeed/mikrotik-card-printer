@@ -40,7 +40,7 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["'Cairo'", "'IBM Plex Sans Arabic'", "'Inter'", "system-ui", "sans-serif"],
+        sans: ["'IBM Plex Sans Arabic'", "'Inter'", "system-ui", "sans-serif"],
       },
     },
   },

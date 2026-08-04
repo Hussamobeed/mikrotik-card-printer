@@ -3,11 +3,9 @@ import { supabaseAuth } from "@/lib/supabaseClient";
 import {
   CachedSyncData,
   LibraryFile,
-  ReportFilters,
   RouterInput,
   RouterPublic,
   SyncResult,
-  UserManagerReport,
 } from "@/types";
 
 // VITE_SUPABASE_FUNCTION_URL looks like:
@@ -34,14 +32,8 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    const status = error?.response?.status;
     const message = error?.response?.data?.error?.message ?? error.message ?? "حدث خطأ غير متوقع";
-    const code = error?.response?.data?.error?.code ?? "ERROR";
-    const enhancedError = new Error(message) as any;
-    enhancedError.status = status;
-    enhancedError.code = code;
-    enhancedError.original = error;
-    return Promise.reject(enhancedError);
+    return Promise.reject(new Error(message));
   }
 );
 
@@ -84,20 +76,6 @@ export const exportApi = {
 };
 
 // ---- Library ----
-// ---- Reports ----
-export const reportsApi = {
-  // Fast: reads from DB cache (no timeout issues)
-  fetch: (routerId: string) =>
-    api
-      .get<{ data: UserManagerReport }>(`/reports/${routerId}`)
-      .then((r) => r.data.data),
-  // Slow: fetches from MikroTik and stores in DB (expect 5-10 min for 3000+ users)
-  sync: (routerId: string) =>
-    api
-      .post<{ data: { success: boolean; usersCount: number; syncedAt: string } }>(`/sync-users/${routerId}`, {}, { timeout: 600_000 })
-      .then((r) => r.data.data),
-};
-
 export const libraryApi = {
   list: () => api.get<{ data: LibraryFile[] }>("/library").then((r) => r.data.data),
   upload: (file: Blob, meta: Record<string, string | number>) => {
@@ -105,7 +83,9 @@ export const libraryApi = {
     form.append("file", file, String(meta.name));
     Object.entries(meta).forEach(([k, v]) => form.append(k, String(v)));
     return api
-      .post<{ data: LibraryFile }>("/library", form)
+      .post<{ data: LibraryFile }>("/library", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
       .then((r) => r.data.data);
   },
   /**
@@ -128,6 +108,16 @@ export const libraryApi = {
 };
 
 // ---- Templates (per-profile print layouts) ----
+// ---- Reports (User Manager sessions, on-demand only) ----
+export const reportsApi = {
+  fetch: (routerId: string) =>
+    api
+      .get<{ data: { rows: Record<string, string>[]; fetchedAt: string } }>(
+        `/reports/${routerId}`
+      )
+      .then((r) => r.data.data),
+};
+
 export const templatesApi = {
   list: () => api.get("/templates").then((r) => r.data.data),
   create: (name: string, profile: string | null, layout: unknown) =>
