@@ -3,11 +3,13 @@ import { z } from "npm:zod@3.23.8";
 import { LIBRARY_BUCKET, supabase } from "./db.ts";
 import { encrypt } from "./cryptoService.ts";
 import {
+  connectRouterOS,
   exportScriptToRouter,
   synchronizeRouter,
   testConnection,
   type RouterRow,
 } from "./mikrotikService.ts";
+import { decrypt } from "./cryptoService.ts";
 import { API_VERSION } from "./version.ts";
 
 type Vars = { userId: string };

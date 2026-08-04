@@ -20,16 +20,19 @@ import { useMemo, useState } from "react";
 
 export function ReportsPage() {
   const [routerId, setRouterId] = useState("");
+  const [report, setReport] = useState<UserManagerReport | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Filters — applied CLIENT-SIDE after fetching all data
   const [filters, setFilters] = useState({
-    fromDate: "",
-    toDate: "",
     profile: "",
     price: "",
+    fromDate: "",
+    toDate: "",
     port: "",
     nasId: "",
   });
-  const [report, setReport] = useState<UserManagerReport | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const { data: routers = [] } = useQuery({
     queryKey: ["routers"],
@@ -40,7 +43,7 @@ export function ReportsPage() {
     if (!routerId) return;
     setLoading(true);
     try {
-      const data = await reportsApi.fetch(routerId, filters);
+      const data = await reportsApi.fetch(routerId);
       setReport(data);
     } catch (err: any) {
       alert(err.message || "فشل جلب التقرير");
@@ -49,13 +52,39 @@ export function ReportsPage() {
     }
   }
 
+  // Client-side filtering + sorting
   const [sortKey, setSortKey] = useState<keyof UserManagerReport["items"][0] | "price">("username");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [searchTerm, setSearchTerm] = useState("");
 
-  const sortedItems = useMemo(() => {
+  const filteredItems = useMemo(() => {
     if (!report) return [];
     let items = [...report.items];
+
+    // Apply each filter
+    if (filters.profile) {
+      items = items.filter((i) => i.profile === filters.profile);
+    }
+    if (filters.price) {
+      const p = parseFloat(filters.price);
+      if (!isNaN(p)) items = items.filter((i) => i.price === p);
+    }
+    if (filters.fromDate) {
+      items = items.filter((i) => i.firstName.includes(filters.fromDate));
+    }
+    if (filters.toDate) {
+      items = items.filter((i) => i.firstName.includes(filters.toDate));
+    }
+    if (filters.port) {
+      items = items.filter((i) => i.nasPort.includes(filters.port));
+    }
+    if (filters.nasId) {
+      const q = filters.nasId.toLowerCase();
+      items = items.filter(
+        (i) =>
+          i.nasPortId.toLowerCase().includes(q) ||
+          i.calledStationId.toLowerCase().includes(q)
+      );
+    }
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
       items = items.filter(
@@ -66,6 +95,8 @@ export function ReportsPage() {
           i.comment.toLowerCase().includes(q)
       );
     }
+
+    // Sort
     items.sort((a, b) => {
       const av = a[sortKey] ?? "";
       const bv = b[sortKey] ?? "";
@@ -76,8 +107,28 @@ export function ReportsPage() {
       const bs = String(bv).toLowerCase();
       return sortDir === "asc" ? as.localeCompare(bs) : bs.localeCompare(as);
     });
+
     return items;
-  }, [report, sortKey, sortDir, searchTerm]);
+  }, [report, filters, searchTerm, sortKey, sortDir]);
+
+  // Summary based on FILTERED items
+  const summary = useMemo(() => {
+    if (!report) return null;
+    const totalRevenue = filteredItems.reduce((s, i) => s + i.price, 0);
+    const profileBreakdown: Record<string, { count: number; revenue: number }> = {};
+    for (const i of filteredItems) {
+      if (!profileBreakdown[i.profile]) profileBreakdown[i.profile] = { count: 0, revenue: 0 };
+      profileBreakdown[i.profile].count++;
+      profileBreakdown[i.profile].revenue += i.price;
+    }
+    return {
+      totalCount: report.items.length,
+      filteredCount: filteredItems.length,
+      totalRevenue,
+      profileBreakdown,
+      profileCount: Object.keys(profileBreakdown).length,
+    };
+  }, [report, filteredItems]);
 
   function exportCSV() {
     if (!report) return;
@@ -85,7 +136,7 @@ export function ReportsPage() {
       "Username", "Customer", "Profile", "Price", "First-Name", "Comment",
       "NAS-Port", "NAS-Port-ID", "Called-Station", "Last-Seen", "Bytes-In", "Bytes-Out", "Uptime"
     ];
-    const rows = sortedItems.map((i) => [
+    const rows = filteredItems.map((i) => [
       i.username, i.customer, i.profile, i.price,
       i.firstName, i.comment, i.nasPort, i.nasPortId,
       i.calledStationId, i.lastSeen, i.bytesIn, i.bytesOut, i.uptime
@@ -115,76 +166,97 @@ export function ReportsPage() {
         </h1>
       </div>
 
+      {/* Step 1: Select Router */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Filter className="h-4 w-4" />
-            اختر الراوتر والفلاتر
+            <RefreshCw className="h-4 w-4" />
+            الخطوة 1: اختر الراوتر واجلب البيانات
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <Label className="text-xs">الراوتر</Label>
-              <Select value={routerId} onChange={(e) => setRouterId(e.target.value)}>
-                <option value="">-- اختر راوتر --</option>
-                {routers.map((r) => (
-                  <option key={r.id} value={r.id}>{r.name}</option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">البروفايل</Label>
-              <Select value={filters.profile} onChange={(e) => setFilters((f) => ({ ...f, profile: e.target.value }))}>
-                <option value="">الكل</option>
-                {profileOptions.map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">السعر</Label>
-              <Input type="number" placeholder="مثال: 180" value={filters.price} onChange={(e) => setFilters((f) => ({ ...f, price: e.target.value }))} />
-            </div>
-            <div>
-              <Label className="text-xs">من تاريخ (First-Name)</Label>
-              <Input type="text" placeholder="2026-05-01" value={filters.fromDate} onChange={(e) => setFilters((f) => ({ ...f, fromDate: e.target.value }))} />
-            </div>
-            <div>
-              <Label className="text-xs">إلى تاريخ (First-Name)</Label>
-              <Input type="text" placeholder="2026-05-31" value={filters.toDate} onChange={(e) => setFilters((f) => ({ ...f, toDate: e.target.value }))} />
-            </div>
-            <div>
-              <Label className="text-xs">NAS Port</Label>
-              <Input placeholder="مثال: 2151700060" value={filters.port} onChange={(e) => setFilters((f) => ({ ...f, port: e.target.value }))} />
-            </div>
-            <div>
-              <Label className="text-xs">NAS ID / Called Station</Label>
-              <Input placeholder="مثال: 00:00:00:00:00:00" value={filters.nasId} onChange={(e) => setFilters((f) => ({ ...f, nasId: e.target.value }))} />
-            </div>
+          <div className="flex gap-2 flex-wrap">
+            <Select value={routerId} onChange={(e) => { setRouterId(e.target.value); setReport(null); }} className="w-64">
+              <option value="">-- اختر راوتر --</option>
+              {routers.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </Select>
+            <Button onClick={fetchReport} disabled={!routerId || loading}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              جلب البيانات
+            </Button>
           </div>
-          <Button onClick={fetchReport} disabled={!routerId || loading} className="w-full sm:w-auto">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            جلب التقرير
-          </Button>
+          {report && (
+            <p className="text-xs text-muted-foreground">
+              تم جلب {report.items.length} مستخدم من راوتر "{report.routerName}" — استخدم الفلاتر أدناه للتصفية
+            </p>
+          )}
         </CardContent>
       </Card>
 
+      {/* Step 2: Filters (only show after data loaded) */}
       {report && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              الخطوة 2: فلترة البيانات (بدون إعادة الاتصال بالراوتر)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div>
+                <Label className="text-xs">البروفايل</Label>
+                <Select value={filters.profile} onChange={(e) => setFilters((f) => ({ ...f, profile: e.target.value }))}>
+                  <option value="">الكل</option>
+                  {profileOptions.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">السعر</Label>
+                <Input type="number" placeholder="مثال: 180" value={filters.price} onChange={(e) => setFilters((f) => ({ ...f, price: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">من تاريخ (First-Name)</Label>
+                <Input placeholder="2026-05-01" value={filters.fromDate} onChange={(e) => setFilters((f) => ({ ...f, fromDate: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">إلى تاريخ (First-Name)</Label>
+                <Input placeholder="2026-05-31" value={filters.toDate} onChange={(e) => setFilters((f) => ({ ...f, toDate: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">NAS Port</Label>
+                <Input placeholder="2151700060" value={filters.port} onChange={(e) => setFilters((f) => ({ ...f, port: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">NAS ID / Called Station</Label>
+                <Input placeholder="00:00:00:00:00:00" value={filters.nasId} onChange={(e) => setFilters((f) => ({ ...f, nasId: e.target.value }))} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Summary Cards */}
+      {summary && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card><CardContent className="flex flex-col gap-2 p-5"><Users className="h-5 w-5 text-primary" /><p className="text-2xl font-bold">{report.totalCount}</p><p className="text-xs text-muted-foreground">إجمالي المستخدمين</p></CardContent></Card>
-          <Card><CardContent className="flex flex-col gap-2 p-5"><TrendingUp className="h-5 w-5 text-emerald-500" /><p className="text-2xl font-bold">{report.totalRevenue.toLocaleString()}</p><p className="text-xs text-muted-foreground">إجمالي الإيرادات</p></CardContent></Card>
-          <Card><CardContent className="flex flex-col gap-2 p-5"><BarChart3 className="h-5 w-5 text-blue-500" /><p className="text-2xl font-bold">{Object.keys(report.profileBreakdown).length}</p><p className="text-xs text-muted-foreground">عدد البروفايلات</p></CardContent></Card>
-          <Card><CardContent className="flex flex-col gap-2 p-5"><Filter className="h-5 w-5 text-orange-500" /><p className="text-2xl font-bold">{sortedItems.length}</p><p className="text-xs text-muted-foreground">نتائج الفلتر الحالي</p></CardContent></Card>
+          <Card><CardContent className="flex flex-col gap-2 p-5"><Users className="h-5 w-5 text-primary" /><p className="text-2xl font-bold">{summary.totalCount}</p><p className="text-xs text-muted-foreground">إجمالي المستخدمين في الراوتر</p></CardContent></Card>
+          <Card><CardContent className="flex flex-col gap-2 p-5"><Filter className="h-5 w-5 text-orange-500" /><p className="text-2xl font-bold">{summary.filteredCount}</p><p className="text-xs text-muted-foreground">نتائج الفلتر الحالي</p></CardContent></Card>
+          <Card><CardContent className="flex flex-col gap-2 p-5"><TrendingUp className="h-5 w-5 text-emerald-500" /><p className="text-2xl font-bold">{summary.totalRevenue.toLocaleString()}</p><p className="text-xs text-muted-foreground">إيرادات الفلتر الحالي</p></CardContent></Card>
+          <Card><CardContent className="flex flex-col gap-2 p-5"><BarChart3 className="h-5 w-5 text-blue-500" /><p className="text-2xl font-bold">{summary.profileCount}</p><p className="text-xs text-muted-foreground">بروفايلات في النتيجة</p></CardContent></Card>
         </div>
       )}
 
-      {report && Object.keys(report.profileBreakdown).length > 0 && (
+      {/* Profile Breakdown */}
+      {summary && Object.keys(summary.profileBreakdown).length > 0 && (
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">الإحصائيات حسب البروفايل</CardTitle></CardHeader>
           <CardContent>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(report.profileBreakdown).map(([profile, stats]) => (
+              {Object.entries(summary.profileBreakdown).map(([profile, stats]) => (
                 <div key={profile} className="rounded-lg border border-border bg-secondary/30 p-3">
                   <p className="font-semibold text-sm">{profile}</p>
                   <div className="flex justify-between text-xs text-muted-foreground mt-1"><span>{stats.count} مستخدم</span><span className="text-emerald-600 font-medium">{stats.revenue.toLocaleString()}</span></div>
@@ -195,12 +267,13 @@ export function ReportsPage() {
         </Card>
       )}
 
+      {/* Data Table */}
       {report && (
         <Card>
           <CardHeader className="pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <CardTitle className="text-sm flex items-center gap-2"><Search className="h-4 w-4" />بيانات المستخدمين</CardTitle>
             <div className="flex gap-2">
-              <Input placeholder="بحث..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-40 sm:w-56" />
+              <Input placeholder="بحث سريع..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-40 sm:w-56" />
               <Button variant="outline" size="sm" onClick={exportCSV}><Download className="h-4 w-4 mr-1" />تصدير CSV</Button>
             </div>
           </CardHeader>
@@ -230,7 +303,7 @@ export function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedItems.map((item, idx) => (
+                  {filteredItems.map((item, idx) => (
                     <tr key={idx} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
                       <td className="px-3 py-2 font-medium">{item.username}</td>
                       <td className="px-3 py-2">{item.profile}</td>
@@ -249,7 +322,7 @@ export function ReportsPage() {
                 </tbody>
               </table>
             </div>
-            {sortedItems.length === 0 && <p className="text-center text-muted-foreground py-8">لا توجد نتائج مطابقة</p>}
+            {filteredItems.length === 0 && <p className="text-center text-muted-foreground py-8">لا توجد نتائج مطابقة للفلتر الحالي</p>}
           </CardContent>
         </Card>
       )}

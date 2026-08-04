@@ -86,13 +86,10 @@ export const exportApi = {
 // ---- Library ----
 // ---- Reports ----
 export const reportsApi = {
-  fetch: (routerId: string, filters: ReportFilters = {}) => {
-    const params = new URLSearchParams();
-    Object.entries(filters).forEach(([k, v]) => { if (v) params.append(k, v); });
-    return api
-      .get<{ data: UserManagerReport }>(`/reports/${routerId}?${params.toString()}`)
-      .then((r) => r.data.data);
-  },
+  fetch: (routerId: string) =>
+    api
+      .get<{ data: UserManagerReport }>(`/reports/${routerId}`)
+      .then((r) => r.data.data),
 };
 
 export const libraryApi = {
