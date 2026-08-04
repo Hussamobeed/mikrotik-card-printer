@@ -165,3 +165,11 @@ export interface UserManagerReport {
   items: UserManagerReportItem[];
 }
 
+export interface ReportFilters {
+  fromDate?: string;
+  toDate?: string;
+  profile?: string;
+  price?: string;
+  port?: string;
+  nasId?: string;
+}
