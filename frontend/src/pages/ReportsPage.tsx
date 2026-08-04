@@ -15,13 +15,16 @@ import {
   Search,
   TrendingUp,
   Users,
+  WifiOff,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 export function ReportsPage() {
   const [routerId, setRouterId] = useState("");
   const [report, setReport] = useState<UserManagerReport | null>(null);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState({ step: "", retry: 0, message: "" });
+  const abortRef = useRef<AbortController | null>(null);
 
   const [filters, setFilters] = useState({
     profile: "",
@@ -38,15 +41,37 @@ export function ReportsPage() {
     queryFn: routersApi.list,
   });
 
-  async function fetchReport() {
+  // Step 1: Sync from MikroTik to DB (SLOW - 5-10 min for large routers)
+  async function syncFromRouter() {
     if (!routerId) return;
     setLoading(true);
+    setProgress({ step: "اتصال", retry: 0, message: "جاري الاتصال بالراوتر وجلب البيانات..." });
     setReport(null);
+
+    try {
+      const result = await reportsApi.sync(routerId);
+      setProgress({ step: "تم", retry: 0, message: `تم جلب ${result.usersCount} مستخدم من الراوتر` });
+      // After sync, fetch from DB (instant)
+      await fetchFromCache();
+    } catch (err: any) {
+      setProgress({ step: "فشل", retry: 0, message: err.message || "فشل المزامنة" });
+      alert(err.message || "فشل المزامنة — قد يكون الراوتر بطيئًا أو غير متصل");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Step 2: Fetch from DB cache (INSTANT - no timeout)
+  async function fetchFromCache() {
+    if (!routerId) return;
+    setLoading(true);
+    setProgress({ step: "قراءة", retry: 0, message: "جاري قراءة البيانات من القاعدة..." });
     try {
       const data = await reportsApi.fetch(routerId);
       setReport(data);
+      setProgress({ step: "تم", retry: 0, message: `تم عرض ${data.items.length} مستخدم` });
     } catch (err: any) {
-      alert(err.message || "فشل جلب التقرير — قد يكون الراوتر بطيئًا، جرّب مرة أخرى");
+      alert(err.message || "فشل قراءة البيانات");
     } finally {
       setLoading(false);
     }
@@ -131,7 +156,7 @@ export function ReportsPage() {
         </h1>
       </div>
 
-      {/* STEP 1: Router selector — ALWAYS visible */}
+      {/* Router selector */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
@@ -150,9 +175,13 @@ export function ReportsPage() {
                 ))}
               </Select>
             </div>
-            <Button onClick={fetchReport} disabled={!routerId || loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-              {loading ? "جاري الجلب..." : "جلب البيانات"}
+            <Button onClick={syncFromRouter} disabled={!routerId || loading} variant="default">
+              {loading && progress.step === "اتصال" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              {loading && progress.step === "اتصال" ? "جاري المزامنة..." : "مزامنة من الراوتر"}
+            </Button>
+            <Button onClick={fetchFromCache} disabled={!routerId || loading} variant="outline">
+              {loading && progress.step === "قراءة" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
+              قراءة من القاعدة
             </Button>
           </div>
           {report && (
@@ -163,8 +192,33 @@ export function ReportsPage() {
         </CardContent>
       </Card>
 
-      {/* STEP 2: Everything else HIDDEN until report loaded */}
-      {report && (
+      {/* Progress / Loading Modal */}
+      {loading && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-6 text-center space-y-4">
+            <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
+            <div>
+              <p className="font-semibold text-lg">{progress.message}</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {progress.step === "اتصال" ? (
+                  <span>قد يستغرق هذا 5-10 دقائق حسب عدد المستخدمين — لا تغلق الصفحة</span>
+                ) : progress.step === "قراءة" ? (
+                  <span>جاري قراءة البيانات المخزنة...</span>
+                ) : (
+                  <span>تم!</span>
+                )}
+              </p>
+            </div>
+            {/* Animated progress bar */}
+            <div className="w-full max-w-md mx-auto h-2 bg-secondary rounded-full overflow-hidden">
+              <div className="h-full bg-primary animate-pulse rounded-full" style={{ width: progress.step === "اتصال" ? "20%" : progress.step === "إعادة محاولة" ? "50%" : "80%" }} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Filters — HIDDEN until loaded */}
+      {report && !loading && (
         <>
           <Card>
             <CardHeader className="pb-2">

@@ -86,9 +86,15 @@ export const exportApi = {
 // ---- Library ----
 // ---- Reports ----
 export const reportsApi = {
+  // Fast: reads from DB cache (no timeout issues)
   fetch: (routerId: string) =>
     api
-      .get<{ data: UserManagerReport }>(`/reports/${routerId}`, { timeout: 120_000 })
+      .get<{ data: UserManagerReport }>(`/reports/${routerId}`)
+      .then((r) => r.data.data),
+  // Slow: fetches from MikroTik and stores in DB (expect 5-10 min for 3000+ users)
+  sync: (routerId: string) =>
+    api
+      .post<{ data: { success: boolean; usersCount: number; syncedAt: string } }>(`/sync-users/${routerId}`, {}, { timeout: 600_000 })
       .then((r) => r.data.data),
 };
 
